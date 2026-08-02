@@ -1,0 +1,21 @@
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# Environment files (never commit secrets)
+.env
+.env.*
+!.env.example
+
+# Python / Django
+venv/
+__pycache__/
+*.pyc
+db.sqlite3
+staticfiles/
