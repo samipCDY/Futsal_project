@@ -6,6 +6,8 @@ from django.utils import timezone
 
 from accounts.models import Profile, Role
 
+from . import notify
+
 # Each ground has three hourly rates. A slot's rate is set by its start time.
 DAY_STARTS = time(10)  # morning rate before this
 EVENING_STARTS = time(16)  # evening (peak) rate from this
@@ -84,6 +86,14 @@ class Ground(models.Model):
         """Start times of every bookable 1-hour slot in a day."""
         first = self.opens_at.hour + (1 if self.opens_at.minute or self.opens_at.second else 0)
         return [time(hour) for hour in range(first, self.closes_at.hour)]
+
+    def review(self, status, note=''):
+        """An admin's decision on the ground. The owner is told by email."""
+        self.status = status
+        self.review_note = note.strip() if status == self.Status.REJECTED else ''
+        self.reviewed_at = timezone.now()
+        self.save(update_fields=['status', 'review_note', 'reviewed_at'])
+        notify.ground_reviewed(self)
 
     def price_at(self, start):
         """The hourly rate for a slot starting at `start`."""

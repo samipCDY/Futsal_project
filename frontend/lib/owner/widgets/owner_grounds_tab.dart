@@ -8,7 +8,7 @@ import '../../core/services/owner_api.dart';
 import '../../core/utils/money.dart';
 import '../../core/utils/time_format.dart';
 import '../screens/ground_form_screen.dart';
-import 'ground_status_chip.dart';
+import '../../core/widgets/ground_status_chip.dart';
 
 /// The owner's grounds: add new ones, edit them, show or hide them.
 class OwnerGroundsTab extends StatefulWidget {

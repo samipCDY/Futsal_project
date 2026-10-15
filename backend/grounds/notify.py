@@ -26,7 +26,8 @@ def ground_submitted(ground, resubmitted=False):
         f'Phone: {owner.mobile_number or "-"}\n\n'
         f'Check the lalpurja photo and approve or reject it here:\n'
         f'{settings.BACKEND_URL}/admin/grounds/ground/{ground.pk}/change/\n',
-        User.objects.filter(is_active=True, is_staff=True).values_list('email', flat=True),
+        settings.ADMIN_NOTIFY_EMAILS
+        or User.objects.filter(is_active=True, is_staff=True).values_list('email', flat=True),
     )
 
 

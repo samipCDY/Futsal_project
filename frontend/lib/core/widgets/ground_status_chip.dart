@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../core/constants/app_colors.dart';
-import '../../core/models/ground_model.dart';
+import '../constants/app_colors.dart';
+import '../models/ground_model.dart';
 
 /// "Approved" / "Pending approval" / "Rejected" label on an owner's ground.
 class GroundStatusChip extends StatelessWidget {

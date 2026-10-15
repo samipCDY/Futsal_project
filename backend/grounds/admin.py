@@ -17,10 +17,10 @@ class GroundAdmin(admin.ModelAdmin):
     list_filter = ('status', 'is_active', 'area')
     search_fields = ('name', 'area', 'address', 'owner__full_name', 'owner__email')
     autocomplete_fields = ('owner',)
-    readonly_fields = ('lalpurja', 'reviewed_at', 'created_at')
+    readonly_fields = ('owner_details', 'map_link', 'lalpurja', 'reviewed_at', 'created_at')
     actions = ('approve',)
     fieldsets = (
-        ('Approval', {'fields': ('lalpurja', 'status', 'review_note', 'reviewed_at')}),
+        ('Approval', {'fields': ('owner_details', 'map_link', 'lalpurja', 'status', 'review_note', 'reviewed_at')}),
         ('Ground', {'fields': (
             'owner', 'name', 'area', 'address', ('latitude', 'longitude'), 'image_url', 'badge_label',
             ('opens_at', 'closes_at'), 'is_active', 'created_at',
@@ -34,6 +34,19 @@ class GroundAdmin(admin.ModelAdmin):
         colours = {Ground.Status.PENDING: '#b7791f', Ground.Status.APPROVED: '#2f855a',
                    Ground.Status.REJECTED: '#c53030'}
         return format_html('<b style="color:{}">{}</b>', colours[ground.status], ground.get_status_display())
+
+    @admin.display(description='Owner')
+    def owner_details(self, ground):
+        """Who to compare with the name on the lalpurja."""
+        owner = ground.owner
+        return format_html('<b>{}</b><br>Phone: {}<br>Email: {}<br>Address: {}',
+                           owner.full_name or '-', owner.mobile_number or '-', owner.email or '-',
+                           ', '.join(part for part in (owner.address, owner.city) if part) or '-')
+
+    @admin.display(description='Location')
+    def map_link(self, ground):
+        return format_html('<a href="https://www.google.com/maps?q={},{}" target="_blank">Open in Google Maps</a>'
+                           '<br>{}', ground.latitude, ground.longitude, ground.address or ground.area)
 
     @admin.display(description='Lalpurja / ownership document')
     def lalpurja(self, ground):
@@ -63,11 +76,7 @@ class GroundAdmin(admin.ModelAdmin):
     def approve(self, request, queryset):
         grounds = list(queryset.exclude(status=Ground.Status.APPROVED).select_related('owner'))
         for ground in grounds:
-            ground.status = Ground.Status.APPROVED
-            ground.review_note = ''
-            ground.reviewed_at = timezone.now()
-            ground.save(update_fields=['status', 'review_note', 'reviewed_at'])
-            notify.ground_reviewed(ground)
+            ground.review(Ground.Status.APPROVED)
         self.message_user(request, f'{len(grounds)} ground(s) approved.', messages.SUCCESS)
 
 

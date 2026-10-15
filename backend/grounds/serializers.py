@@ -5,6 +5,7 @@ from rest_framework import serializers
 
 from . import notify
 from .models import Ground
+from .storage import signed_document_url
 
 # An admin checks these again when the owner changes them.
 REVIEWED_FIELDS = ('name', 'area', 'address', 'latitude', 'longitude', 'ownership_document')
@@ -118,3 +119,32 @@ class OwnerGroundSerializer(serializers.ModelSerializer):
         if resubmit:
             notify.ground_submitted(ground, resubmitted=True)
         return ground
+
+
+class AdminGroundSerializer(serializers.ModelSerializer):
+    """A ground as an admin reviews it: everything, plus who owns it and a
+    short-lived link to the lalpurja photo (detail view only)."""
+
+    owner_name = serializers.CharField(source='owner.full_name', read_only=True)
+    owner_phone = serializers.CharField(source='owner.mobile_number', read_only=True)
+    owner_email = serializers.CharField(source='owner.email', read_only=True)
+    owner_address = serializers.SerializerMethodField()
+    document_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Ground
+        fields = [
+            'id', 'name', 'area', 'address', 'latitude', 'longitude', 'morning_price', 'day_price',
+            'evening_price', 'image_url', 'badge_label', 'opens_at', 'closes_at', 'is_active',
+            'status', 'review_note', 'reviewed_at', 'created_at',
+            'owner_name', 'owner_phone', 'owner_email', 'owner_address', 'document_url',
+        ]
+        read_only_fields = fields
+
+    def get_owner_address(self, ground):
+        return ', '.join(part for part in (ground.owner.address, ground.owner.city) if part)
+
+    def get_document_url(self, ground):
+        if not self.context.get('with_document'):
+            return None
+        return signed_document_url(ground.ownership_document)

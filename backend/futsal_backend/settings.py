@@ -188,6 +188,9 @@ EMAIL_BACKEND = ('django.core.mail.backends.smtp.EmailBackend' if EMAIL_HOST and
 EMAIL_USE_TLS = True
 EMAIL_TIMEOUT = 10
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'Futsal Finder <noreply@futsalfinder.local>')
+# Real inboxes that get "new ground to approve" emails, comma separated.
+# Empty = the emails of the admin panel logins.
+ADMIN_NOTIFY_EMAILS = [e.strip() for e in os.environ.get('ADMIN_NOTIFY_EMAILS', '').split(',') if e.strip()]
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': ['accounts.authentication.SupabaseJWTAuthentication'],

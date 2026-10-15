@@ -1,18 +1,18 @@
 from datetime import datetime, timedelta
 
-from django.db.models import Exists, OuterRef
+from django.db.models import Count, Exists, OuterRef, Q
 from django.utils.dateparse import parse_date
 from rest_framework import mixins, viewsets
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from accounts.permissions import IsGroundOwner
+from accounts.permissions import IsAdminRole, IsGroundOwner
 from bookings.models import Booking
 
 from .models import Favourite, Ground, slot_has_started
-from .serializers import GroundSerializer, OwnerGroundSerializer
+from .serializers import AdminGroundSerializer, GroundSerializer, OwnerGroundSerializer
 
 
 class GroundViewSet(viewsets.ReadOnlyModelViewSet):
@@ -83,3 +83,56 @@ class OwnerGroundViewSet(mixins.CreateModelMixin,
 
     def perform_create(self, serializer):
         serializer.save(owner=self.request.user)
+
+
+class AdminGroundViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
+    """Grounds for an admin to approve or reject. `?status=pending` (the
+    default), `approved` or `rejected`, oldest first so nobody waits long.
+    `?search=` instead looks through every ground, e.g. to find one a
+    complaint is about, by its name, area, address or the owner's details."""
+
+    serializer_class = AdminGroundSerializer
+    permission_classes = [IsAuthenticated, IsAdminRole]
+
+    def get_queryset(self):
+        grounds = Ground.objects.select_related('owner').order_by('created_at')
+        if self.action != 'list':
+            return grounds
+        search = self.request.query_params.get('search', '').strip()
+        if search:
+            return grounds.filter(
+                Q(name__icontains=search) | Q(area__icontains=search) | Q(address__icontains=search)
+                | Q(owner__full_name__icontains=search) | Q(owner__email__icontains=search)
+                | Q(owner__mobile_number__icontains=search)
+            )
+        status = self.request.query_params.get('status', Ground.Status.PENDING)
+        if status not in Ground.Status.values:
+            raise ValidationError({'status': 'Use pending, approved or rejected.'})
+        return grounds.filter(status=status)
+
+    def get_serializer_context(self):
+        # Signing the document link is a call to Supabase, so only on one ground.
+        return {**super().get_serializer_context(), 'with_document': self.action != 'list'}
+
+    @action(detail=True, methods=['post'])
+    def approve(self, request, pk=None):
+        ground = self.get_object()
+        ground.review(Ground.Status.APPROVED)
+        return Response(self.get_serializer(ground).data)
+
+    @action(detail=True, methods=['post'])
+    def reject(self, request, pk=None):
+        note = str(request.data.get('review_note', '')).strip()
+        if not note:
+            raise ValidationError({'review_note': 'Tell the owner why, so they can fix it.'})
+        ground = self.get_object()
+        ground.review(Ground.Status.REJECTED, note[:255])
+        return Response(self.get_serializer(ground).data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsAdminRole])
+def admin_summary(request):
+    """Counts for the admin's approval dashboard."""
+    counts = dict(Ground.objects.order_by().values_list('status').annotate(total=Count('id')))
+    return Response({status: counts.get(status, 0) for status in Ground.Status.values})
