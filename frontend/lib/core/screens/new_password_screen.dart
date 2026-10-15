@@ -44,7 +44,7 @@ class _NewPasswordScreenState extends State<NewPasswordScreen> {
 
     setState(() => _isSubmitting = true);
     try {
-      await AuthApi.resetPassword(widget.email, _passwordController.text);
+      await AuthApi.setNewPassword(_passwordController.text);
       if (!mounted) return;
       final messenger = ScaffoldMessenger.of(context);
       Navigator.of(context).popUntil((route) => route.isFirst);
@@ -55,7 +55,7 @@ class _NewPasswordScreenState extends State<NewPasswordScreen> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
     } catch (_) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not reach the server. Is the backend running?')),
+        const SnackBar(content: Text('Could not reach the server. Check your internet connection.')),
       );
     } finally {
       if (mounted) setState(() => _isSubmitting = false);

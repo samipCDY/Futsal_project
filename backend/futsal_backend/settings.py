@@ -48,6 +48,12 @@ INSTALLED_APPS = [
     'accounts',
 ]
 
+# Use the project's email-based account model instead of Django's default
+# username-based User model. This must be configured before the first
+# migration so Django creates only one user model and its group/permission
+# relations.
+AUTH_USER_MODEL = 'accounts.User'
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'corsheaders.middleware.CorsMiddleware',
@@ -126,9 +132,6 @@ AUTH_PASSWORD_VALIDATORS = [
         'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
     },
 ]
-
-
-AUTH_USER_MODEL = 'accounts.User'
 
 
 # Internationalization

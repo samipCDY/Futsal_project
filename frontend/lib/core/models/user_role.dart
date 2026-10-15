@@ -15,7 +15,9 @@ extension UserRoleApi on UserRole {
     }
   }
 
-  static UserRole fromApiValue(String value) {
+  /// Returns null for anything unrecognised, so a bad value in the database
+  /// can't crash the auth listener — the user just isn't let in.
+  static UserRole? fromApiValue(String? value) {
     switch (value) {
       case 'customer':
         return UserRole.customer;
@@ -24,7 +26,7 @@ extension UserRoleApi on UserRole {
       case 'admin':
         return UserRole.admin;
       default:
-        throw ArgumentError('Unknown role: $value');
+        return null;
     }
   }
 }

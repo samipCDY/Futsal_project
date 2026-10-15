@@ -35,13 +35,15 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
     setState(() => _isSubmitting = true);
     try {
-      await AuthApi.sendOtp(email);
+      await AuthApi.sendPasswordResetOtp(email);
       if (!mounted) return;
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => OtpVerificationScreen(
             email: email,
             title: 'Password reset verification',
+            onVerifyCode: (code) => AuthApi.verifyPasswordResetOtp(email, code),
+            onResend: () => AuthApi.sendPasswordResetOtp(email),
             onVerified: (ctx) async {
               Navigator.of(ctx).pushReplacement(
                 MaterialPageRoute(builder: (_) => NewPasswordScreen(email: email)),
@@ -54,7 +56,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
     } catch (_) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not reach the server. Is the backend running?')),
+        const SnackBar(content: Text('Could not reach the server. Check your internet connection.')),
       );
     } finally {
       if (mounted) setState(() => _isSubmitting = false);

@@ -11,6 +11,8 @@ Future<void> confirmAndSignOut(BuildContext context) async {
     context: context,
     builder: (dialogContext) => AlertDialog(
       content: const Text('Logout of your account?'),
+      contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
+      actionsPadding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -25,6 +27,6 @@ Future<void> confirmAndSignOut(BuildContext context) async {
   );
 
   if (confirmed == true && context.mounted) {
-    context.read<AuthProvider>().signOut();
+    await context.read<AuthProvider>().signOut();
   }
 }

@@ -10,6 +10,8 @@ class GroundModel {
   final double pricePerHour;
   final String imageUrl;
   final String? badgeLabel;
+  final double latitude;
+  final double longitude;
 
   const GroundModel({
     required this.id,
@@ -22,5 +24,7 @@ class GroundModel {
     required this.pricePerHour,
     required this.imageUrl,
     this.badgeLabel,
+    required this.latitude,
+    required this.longitude,
   });
 }

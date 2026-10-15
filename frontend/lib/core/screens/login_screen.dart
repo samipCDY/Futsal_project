@@ -1,16 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import '../constants/app_colors.dart';
-import '../providers/auth_provider.dart';
 import '../services/auth_api.dart';
 import 'forgot_password_screen.dart';
-import 'role_select_screen.dart';
 import 'signup_screen.dart';
 
 /// Shared login gate for every account type — customer, ground owner, and
-/// admin all sign in through this one screen, checked against the real
-/// backend. The "Dev: preview other roles" link is just a fast path around
-/// typing credentials while testing each dashboard.
+/// admin all sign in through this one screen, checked against Supabase.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -44,14 +39,15 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => _isLoggingIn = true);
     try {
-      final result = await AuthApi.login(email, password);
-      if (!mounted) return;
-      context.read<AuthProvider>().signInAs(result.role);
+      await AuthApi.login(email, password);
+      // AppRouter picks up the new session and swaps screens on its own.
     } on ApiException catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
     } catch (_) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not reach the server. Is the backend running?')),
+        const SnackBar(content: Text('Could not reach the server. Check your internet connection.')),
       );
     } finally {
       if (mounted) setState(() => _isLoggingIn = false);
@@ -83,15 +79,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         onLogin: _login,
                       ),
                       const Spacer(),
-                      TextButton(
-                        onPressed: () => Navigator.of(context).push(
-                          MaterialPageRoute(builder: (_) => const RoleSelectScreen()),
-                        ),
-                        child: const Text(
-                          'Dev: preview other roles',
-                          style: TextStyle(color: Colors.white38, fontSize: 12),
-                        ),
-                      ),
                     ],
                   ),
                 ),

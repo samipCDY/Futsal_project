@@ -7,19 +7,24 @@ const _codeLength = 6;
 const _resendCooldownSeconds = 60;
 
 /// Confirms the user actually owns the email they entered, then hands off
-/// to [onVerified] — reused by both Sign Up (verify → create account) and
+/// to [onVerified] — reused by both Sign Up (verify → land in the app) and
 /// Forgot Password (verify → go choose a new password), so what happens
 /// after a correct code is entered is the caller's decision, not this
-/// screen's.
+/// screen's. [onVerifyCode]/[onResend] are also caller-supplied since
+/// Supabase needs to know which OTP type (signup vs. recovery) it's for.
 class OtpVerificationScreen extends StatefulWidget {
   final String email;
   final String title;
+  final Future<void> Function(String code) onVerifyCode;
+  final Future<void> Function() onResend;
   final Future<void> Function(BuildContext context) onVerified;
 
   const OtpVerificationScreen({
     super.key,
     required this.email,
     required this.title,
+    required this.onVerifyCode,
+    required this.onResend,
     required this.onVerified,
   });
 
@@ -92,7 +97,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     });
 
     try {
-      await AuthApi.verifyOtp(widget.email, _enteredCode);
+      await widget.onVerifyCode(_enteredCode);
       if (!mounted) return;
       await widget.onVerified(context);
     } on ApiException catch (e) {
@@ -104,7 +109,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       });
       _focusNodes.first.requestFocus();
     } catch (_) {
-      setState(() => _errorText = 'Could not reach the server. Is the backend running?');
+      setState(() => _errorText = 'Could not reach the server. Check your internet connection.');
     } finally {
       if (mounted) setState(() => _isVerifying = false);
     }
@@ -115,7 +120,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
     setState(() => _isResending = true);
     try {
-      await AuthApi.sendOtp(widget.email);
+      await widget.onResend();
       _startResendCooldown();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -125,7 +130,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     } on ApiException catch (e) {
       setState(() => _errorText = e.message);
     } catch (_) {
-      setState(() => _errorText = 'Could not reach the server. Is the backend running?');
+      setState(() => _errorText = 'Could not reach the server. Check your internet connection.');
     } finally {
       if (mounted) setState(() => _isResending = false);
     }

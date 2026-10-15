@@ -14,6 +14,8 @@ const mockGrounds = [
     pricePerHour: 1400,
     imageUrl: '',
     badgeLabel: 'Free bibs + water',
+    latitude: 27.6939,
+    longitude: 85.3336,
   ),
   GroundModel(
     id: 'g2',
@@ -26,5 +28,7 @@ const mockGrounds = [
     pricePerHour: 1200,
     imageUrl: '',
     badgeLabel: 'Tournament Sat',
+    latitude: 27.6923,
+    longitude: 85.3346,
   ),
 ];

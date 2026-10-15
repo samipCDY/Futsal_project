@@ -1,22 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:latlong2/latlong.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/constants/app_text_styles.dart';
 import '../../core/mock/mock_grounds.dart';
-import '../../core/models/map_pin_model.dart';
+import '../../core/models/ground_model.dart';
 import 'ground_search_bar.dart';
-import 'map_placeholder_canvas.dart';
 import 'map_ground_pin.dart';
-import 'map_ground_preview_card.dart';
 import 'map_controls.dart';
 
-const _myLocation = Offset(0.5, 0.64);
+const _distance = Distance();
 
-// One pin per known ground — there is no generic points-of-interest layer,
-// so nothing except real futsal grounds ever gets a marker here.
-const _pins = [
-  MapPinModel(groundId: 'g1', position: Offset(0.62, 0.4), showPriceTag: true),
-  MapPinModel(groundId: 'g2', position: Offset(0.28, 0.26), showPriceTag: true),
-];
-
+/// Yango/inDrive-style location picker: a pin fixed at the screen centre
+/// while the map pans underneath it. Confirming reads whatever coordinate
+/// is under the pin and sorts grounds by real distance from that point.
 class MapTab extends StatefulWidget {
   const MapTab({super.key});
 
@@ -25,54 +23,99 @@ class MapTab extends StatefulWidget {
 }
 
 class _MapTabState extends State<MapTab> {
-  String _selectedGroundId = 'g1';
+  final _mapController = MapController();
+  LatLng? _myLocation;
+  bool _hasCenteredOnMyLocation = false;
+
+  LatLng? _pinnedCenter;
+  List<GroundModel>? _nearbyGrounds;
+
+  @override
+  void initState() {
+    super.initState();
+    _initLocation();
+  }
+
+  Future<void> _initLocation() async {
+    if (!await Geolocator.isLocationServiceEnabled()) return;
+
+    var permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+    if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+      return;
+    }
+
+    final position = await Geolocator.getCurrentPosition();
+    if (!mounted) return;
+    final location = LatLng(position.latitude, position.longitude);
+    setState(() => _myLocation = location);
+    if (!_hasCenteredOnMyLocation) {
+      _hasCenteredOnMyLocation = true;
+      _mapController.move(location, _mapController.camera.zoom);
+    }
+  }
+
+  Future<void> _goToMyLocation() async {
+    if (_myLocation == null) {
+      await _initLocation();
+    }
+    if (_myLocation == null) return;
+    _mapController.move(_myLocation!, _mapController.camera.zoom);
+  }
+
+  void _zoomBy(double delta) {
+    _mapController.move(_mapController.camera.center, _mapController.camera.zoom + delta);
+  }
+
+  void _confirmLocation() {
+    final center = _mapController.camera.center;
+    final sorted = [...mockGrounds]..sort((a, b) {
+      final distanceA = _distance.as(LengthUnit.Kilometer, center, LatLng(a.latitude, a.longitude));
+      final distanceB = _distance.as(LengthUnit.Kilometer, center, LatLng(b.latitude, b.longitude));
+      return distanceA.compareTo(distanceB);
+    });
+    setState(() {
+      _pinnedCenter = center;
+      _nearbyGrounds = sorted;
+    });
+  }
+
+  void _changeLocation() => setState(() => _nearbyGrounds = null);
 
   @override
   Widget build(BuildContext context) {
-    final selectedPin = _pins.firstWhere((p) => p.groundId == _selectedGroundId);
-    final selectedGround = mockGrounds.firstWhere((g) => g.id == _selectedGroundId);
-
     return Stack(
       fit: StackFit.expand,
       children: [
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final size = Size(constraints.maxWidth, constraints.maxHeight);
-            return Stack(
-              fit: StackFit.expand,
-              children: [
-                MapPlaceholderCanvas(routeStart: _myLocation, routeEnd: selectedPin.position),
-                for (final pin in _pins)
-                  Positioned(
-                    left: pin.position.dx * size.width - (pin.groundId == _selectedGroundId ? 20 : 16),
-                    top: pin.position.dy * size.height - (pin.groundId == _selectedGroundId ? 46 : 32),
-                    child: MapGroundPin(
-                      priceLabel: pin.showPriceTag
-                          ? 'Rs ${mockGrounds.firstWhere((g) => g.id == pin.groundId).pricePerHour.toStringAsFixed(0)}/hr'
-                          : null,
-                      isSelected: pin.groundId == _selectedGroundId,
-                      onTap: () => setState(() => _selectedGroundId = pin.groundId),
-                    ),
-                  ),
-                Positioned(
-                  left: _myLocation.dx * size.width - 11,
-                  top: _myLocation.dy * size.height - 11,
-                  child: const MyLocationDot(),
-                ),
-                Positioned(
-                  left: size.width * 0.08,
-                  top: size.height * 0.5,
-                  child: const _RouteChip(icon: Icons.alt_route, label: 'Fastest · 4 min'),
-                ),
-                Positioned(
-                  right: size.width * 0.1,
-                  top: size.height * 0.58,
-                  child: const _RouteChip(icon: Icons.straighten, label: 'Shortest · 0.8 km'),
-                ),
-              ],
-            );
-          },
+        FlutterMap(
+          mapController: _mapController,
+          options: MapOptions(
+            initialCenter: LatLng(mockGrounds.first.latitude, mockGrounds.first.longitude),
+            initialZoom: 15,
+            onPositionChanged: (camera, hasGesture) {
+              if (hasGesture && _nearbyGrounds != null) _changeLocation();
+            },
+          ),
+          children: [
+            TileLayer(
+              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+              userAgentPackageName: 'com.example.futsal_app',
+            ),
+            if (_myLocation != null)
+              MarkerLayer(
+                markers: [
+                  Marker(point: _myLocation!, width: 22, height: 22, child: const MyLocationDot()),
+                ],
+              ),
+            const RichAttributionWidget(
+              alignment: AttributionAlignment.bottomLeft,
+              attributions: [TextSourceAttribution('OpenStreetMap contributors')],
+            ),
+          ],
         ),
+        const IgnorePointer(child: Center(child: _CenterPin())),
         Positioned(
           top: 0,
           left: 0,
@@ -85,14 +128,17 @@ class _MapTabState extends State<MapTab> {
             ),
           ),
         ),
-        const Positioned(
+        Positioned(
           left: 16,
           top: 120,
           child: Column(
             children: [
-              MapZoomControls(),
-              SizedBox(height: 20),
-              MapControlButton(icon: Icons.layers_outlined),
+              MapZoomControls(
+                onZoomIn: () => _zoomBy(1),
+                onZoomOut: () => _zoomBy(-1),
+              ),
+              const SizedBox(height: 20),
+              const MapControlButton(icon: Icons.layers_outlined),
             ],
           ),
         ),
@@ -108,14 +154,29 @@ class _MapTabState extends State<MapTab> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  MapControlButton(icon: Icons.my_location, onTap: () {}),
+                  MapControlButton(icon: Icons.my_location, onTap: _goToMyLocation),
                   const SizedBox(height: 12),
-                  MapGroundPreviewCard(
-                    ground: selectedGround,
-                    onBookNow: () {},
-                    onStartRoute: () {},
-                    onOpenMap: () {},
-                  ),
+                  if (_nearbyGrounds == null)
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: _confirmLocation,
+                        icon: const Icon(Icons.check_circle_outline, size: 18),
+                        label: const Text('Confirm this location', style: TextStyle(fontWeight: FontWeight.w600)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primaryGreen,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    )
+                  else
+                    _NearbyGroundsPanel(
+                      grounds: _nearbyGrounds!,
+                      pinnedCenter: _pinnedCenter!,
+                      onChangeLocation: _changeLocation,
+                    ),
                 ],
               ),
             ),
@@ -126,27 +187,143 @@ class _MapTabState extends State<MapTab> {
   }
 }
 
-class _RouteChip extends StatelessWidget {
-  final IconData icon;
-  final String label;
+class _CenterPin extends StatelessWidget {
+  const _CenterPin();
 
-  const _RouteChip({required this.icon, required this.label});
+  @override
+  Widget build(BuildContext context) {
+    return Transform.translate(
+      offset: const Offset(0, -22),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.location_on, size: 44, color: AppColors.darkGreen),
+          Container(
+            width: 8,
+            height: 3,
+            decoration: BoxDecoration(
+              color: const Color(0x40000000),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NearbyGroundsPanel extends StatelessWidget {
+  final List<GroundModel> grounds;
+  final LatLng pinnedCenter;
+  final VoidCallback onChangeLocation;
+
+  const _NearbyGroundsPanel({
+    required this.grounds,
+    required this.pinnedCenter,
+    required this.onChangeLocation,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      constraints: const BoxConstraints(maxHeight: 280),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: const [BoxShadow(color: Color(0x22000000), blurRadius: 6, offset: Offset(0, 2))],
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const [BoxShadow(color: Color(0x22000000), blurRadius: 16, offset: Offset(0, 6))],
       ),
-      child: Row(
+      child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: AppColors.textSecondary),
-          const SizedBox(width: 6),
-          Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 8, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '${grounds.length} grounds near this spot',
+                    style: AppTextStyles.subheading.copyWith(fontSize: 15),
+                  ),
+                ),
+                TextButton(onPressed: onChangeLocation, child: const Text('Change location')),
+              ],
+            ),
+          ),
+          const Divider(height: 1, color: AppColors.divider),
+          Flexible(
+            child: ListView.separated(
+              shrinkWrap: true,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              itemCount: grounds.length,
+              separatorBuilder: (_, __) => const Divider(height: 1, color: AppColors.divider),
+              itemBuilder: (context, index) {
+                final ground = grounds[index];
+                final km = _distance.as(LengthUnit.Kilometer, pinnedCenter, LatLng(ground.latitude, ground.longitude));
+                return _NearbyGroundTile(ground: ground, distanceKm: km, onBookNow: () {});
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NearbyGroundTile extends StatelessWidget {
+  final GroundModel ground;
+  final double distanceKm;
+  final VoidCallback? onBookNow;
+
+  const _NearbyGroundTile({required this.ground, required this.distanceKm, this.onBookNow});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [AppColors.primaryGreen.withValues(alpha: 0.85), AppColors.darkGreen],
+              ),
+            ),
+            child: const Icon(Icons.sports_soccer, color: Colors.white70, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(ground.name, style: AppTextStyles.subheading.copyWith(fontSize: 14)),
+                const SizedBox(height: 2),
+                Row(
+                  children: [
+                    const Icon(Icons.star, size: 12, color: AppColors.rating),
+                    const SizedBox(width: 3),
+                    Text('${ground.rating} · ${distanceKm.toStringAsFixed(1)} km', style: AppTextStyles.caption),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text('Rs ${ground.pricePerHour.toStringAsFixed(0)}/hr', style: AppTextStyles.price.copyWith(fontSize: 13)),
+              TextButton(
+                style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 28)),
+                onPressed: onBookNow,
+                child: const Text('Book now', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+              ),
+            ],
+          ),
         ],
       ),
     );

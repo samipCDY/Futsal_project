@@ -95,27 +95,25 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
     setState(() => _isSubmitting = true);
     try {
-      await AuthApi.sendOtp(email);
+      await AuthApi.signUpWithOtp(
+        email: email,
+        password: password,
+        fullName: fullName,
+        mobileNumber: mobileNumber,
+        role: role,
+      );
       if (!mounted) return;
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => OtpVerificationScreen(
             email: email,
             title: 'Sign up verification',
+            onVerifyCode: (code) => AuthApi.verifySignupOtp(email, code),
+            onResend: () => AuthApi.resendSignupOtp(email),
             onVerified: (ctx) async {
-              await AuthApi.register(
-                email: email,
-                password: password,
-                fullName: fullName,
-                mobileNumber: mobileNumber,
-                role: role,
-              );
-              if (!ctx.mounted) return;
-              final messenger = ScaffoldMessenger.of(ctx);
+              // verifySignupOtp already signed the user in — AppRouter
+              // picks up the new session and swaps screens on its own.
               Navigator.of(ctx).popUntil((route) => route.isFirst);
-              messenger.showSnackBar(
-                const SnackBar(content: Text('Account created! Please log in.')),
-              );
             },
           ),
         ),
@@ -124,7 +122,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
     } catch (_) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not reach the server. Is the backend running?')),
+        const SnackBar(content: Text('Could not reach the server. Check your internet connection.')),
       );
     } finally {
       if (mounted) setState(() => _isSubmitting = false);

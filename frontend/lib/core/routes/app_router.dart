@@ -15,9 +15,13 @@ class AppRouter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final role = context.watch<AuthProvider>().currentRole;
+    final auth = context.watch<AuthProvider>();
 
-    switch (role) {
+    if (auth.isLoading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    switch (auth.currentRole) {
       case UserRole.customer:
         return const CustomerHomeScreen();
       case UserRole.groundOwner:
