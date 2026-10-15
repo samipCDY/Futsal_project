@@ -2,25 +2,27 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
-import '../../core/constants/app_colors.dart';
-import '../../core/constants/app_text_styles.dart';
-import '../../core/models/profile_model.dart';
-import '../../core/providers/profile_provider.dart';
-import '../../core/services/api_exception.dart';
-import '../../core/widgets/logout_confirmation.dart';
-import '../../core/widgets/profile_avatar.dart';
+import '../constants/app_colors.dart';
+import '../constants/app_text_styles.dart';
+import '../models/profile_model.dart';
+import '../providers/profile_provider.dart';
+import '../services/api_exception.dart';
+import 'logout_confirmation.dart';
+import 'profile_avatar.dart';
 import '../screens/contact_us_screen.dart';
 import '../screens/edit_profile_screen.dart';
-import '../screens/favourites_screen.dart';
 
 const _languageNames = {'en': 'English', 'ne': 'नेपाली'};
 const _themeNames = {'system': 'System', 'light': 'Light', 'dark': 'Dark'};
 
+/// The Profile page, shared by customers and ground owners. Tiles whose
+/// callback is null (e.g. Favourite grounds for owners) are hidden.
 class ProfileTab extends StatelessWidget {
   /// Switches the home screen to the Bookings tab.
   final VoidCallback? onOpenBookings;
+  final VoidCallback? onOpenFavourites;
 
-  const ProfileTab({super.key, this.onOpenBookings});
+  const ProfileTab({super.key, this.onOpenBookings, this.onOpenFavourites});
 
   String get _greeting {
     final hour = DateTime.now().hour;
@@ -95,18 +97,22 @@ class ProfileTab extends StatelessWidget {
                   label: 'Edit profile',
                   onTap: () => _push(context, const EditProfileScreen()),
                 ),
-                const _TileDivider(),
-                _ProfileTile(
-                  icon: Icons.event_available_outlined,
-                  label: 'My bookings',
-                  onTap: onOpenBookings,
-                ),
-                const _TileDivider(),
-                _ProfileTile(
-                  icon: Icons.favorite_border,
-                  label: 'Favourite grounds',
-                  onTap: () => _push(context, const FavouritesScreen()),
-                ),
+                if (onOpenBookings != null) ...[
+                  const _TileDivider(),
+                  _ProfileTile(
+                    icon: Icons.event_available_outlined,
+                    label: 'My bookings',
+                    onTap: onOpenBookings,
+                  ),
+                ],
+                if (onOpenFavourites != null) ...[
+                  const _TileDivider(),
+                  _ProfileTile(
+                    icon: Icons.favorite_border,
+                    label: 'Favourite grounds',
+                    onTap: onOpenFavourites,
+                  ),
+                ],
                 const _TileDivider(),
                 _ProfileTile(
                   icon: Icons.palette_outlined,

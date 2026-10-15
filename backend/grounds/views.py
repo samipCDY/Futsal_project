@@ -2,26 +2,28 @@ from datetime import datetime, timedelta
 
 from django.db.models import Exists, OuterRef
 from django.utils.dateparse import parse_date
-from rest_framework import viewsets
+from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from accounts.permissions import IsGroundOwner
 from bookings.models import Booking
 
 from .models import Favourite, Ground, slot_has_started
-from .serializers import GroundSerializer
+from .serializers import GroundSerializer, OwnerGroundSerializer
 
 
 class GroundViewSet(viewsets.ReadOnlyModelViewSet):
-    """Grounds customers can browse. Owners manage theirs in the admin panel
-    for now."""
+    """Approved grounds customers can browse and book. Owners manage theirs
+    through OwnerGroundViewSet."""
 
     serializer_class = GroundSerializer
 
     def get_queryset(self):
         mine = Favourite.objects.filter(ground=OuterRef('pk'), customer=self.request.user)
-        return Ground.objects.filter(is_active=True).annotate(is_favourite=Exists(mine))
+        return Ground.objects.visible().annotate(is_favourite=Exists(mine))
 
     @action(detail=False)
     def favourites(self, request):
@@ -59,6 +61,25 @@ class GroundViewSet(viewsets.ReadOnlyModelViewSet):
             slots.append({
                 'start_time': start.strftime('%H:%M'),
                 'end_time': end.strftime('%H:%M'),
+                'price': f'{ground.price_at(start):.2f}',
                 'available': start not in booked and not slot_has_started(day, start),
             })
         return Response({'date': day.isoformat(), 'slots': slots})
+
+
+class OwnerGroundViewSet(mixins.CreateModelMixin,
+                         mixins.ListModelMixin,
+                         mixins.RetrieveModelMixin,
+                         mixins.UpdateModelMixin,
+                         viewsets.GenericViewSet):
+    """A ground owner's own grounds. No delete: past bookings point at the
+    ground, so owners hide it with is_active instead."""
+
+    serializer_class = OwnerGroundSerializer
+    permission_classes = [IsAuthenticated, IsGroundOwner]
+
+    def get_queryset(self):
+        return Ground.objects.filter(owner=self.request.user).order_by('-created_at')
+
+    def perform_create(self, serializer):
+        serializer.save(owner=self.request.user)

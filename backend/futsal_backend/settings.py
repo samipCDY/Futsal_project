@@ -170,6 +170,24 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 SUPABASE_URL = os.environ.get('SUPABASE_URL', 'https://oauxglvqzjjaaezqapkl.supabase.co')
 SUPABASE_JWT_ISSUER = f'{SUPABASE_URL}/auth/v1'
 SUPABASE_JWKS_URL = f'{SUPABASE_JWT_ISSUER}/.well-known/jwks.json'
+# Secret (service role) key, only so the admin panel can open the private
+# lalpurja photos. Never put it in the app.
+SUPABASE_SECRET_KEY = os.environ.get('SUPABASE_SECRET_KEY', '')
+
+# Where links in emails point, e.g. to a ground in the admin panel.
+BACKEND_URL = os.environ.get('BACKEND_URL', 'http://localhost:8000').rstrip('/')
+
+# Emails to admins (new grounds to approve) and owners (approved/rejected).
+# Without an SMTP password they're only printed in the runserver window.
+EMAIL_HOST = os.environ.get('EMAIL_HOST', '')
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587'))
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+EMAIL_BACKEND = ('django.core.mail.backends.smtp.EmailBackend' if EMAIL_HOST and EMAIL_HOST_PASSWORD
+                 else 'django.core.mail.backends.console.EmailBackend')
+EMAIL_USE_TLS = True
+EMAIL_TIMEOUT = 10
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'Futsal Finder <noreply@futsalfinder.local>')
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': ['accounts.authentication.SupabaseJWTAuthentication'],

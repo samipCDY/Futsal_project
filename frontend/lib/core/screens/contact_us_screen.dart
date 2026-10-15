@@ -1,23 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:url_launcher/url_launcher.dart';
-import '../../core/config/contact_info.dart';
-import '../../core/constants/app_colors.dart';
-import '../../core/constants/app_text_styles.dart';
+import '../config/contact_info.dart';
+import '../constants/app_colors.dart';
+import '../constants/app_text_styles.dart';
+import '../utils/launcher.dart';
 
 class ContactUsScreen extends StatelessWidget {
   const ContactUsScreen({super.key});
-
-  /// Opens the dialer/email app; if there isn't one, copies the value so the
-  /// user can still use it.
-  Future<void> _open(BuildContext context, Uri uri, String value) async {
-    final opened = await launchUrl(uri).catchError((_) => false);
-    if (opened || !context.mounted) return;
-    await Clipboard.setData(ClipboardData(text: value));
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Copied $value')));
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -45,14 +33,14 @@ class ContactUsScreen extends StatelessWidget {
                     icon: Icons.call_outlined,
                     label: 'Call us',
                     value: ContactInfo.phone,
-                    onTap: () => _open(context, Uri(scheme: 'tel', path: ContactInfo.phone), ContactInfo.phone),
+                    onTap: () => callNumber(context, ContactInfo.phone),
                   ),
                 if (ContactInfo.email.isNotEmpty)
                   _ContactTile(
                     icon: Icons.email_outlined,
                     label: 'Email us',
                     value: ContactInfo.email,
-                    onTap: () => _open(
+                    onTap: () => openOrCopy(
                       context,
                       Uri(scheme: 'mailto', path: ContactInfo.email, query: 'subject=Futsal Finder help'),
                       ContactInfo.email,

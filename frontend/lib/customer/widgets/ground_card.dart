@@ -83,7 +83,7 @@ class GroundCard extends StatelessWidget {
                               text: TextSpan(
                                 children: [
                                   TextSpan(
-                                    text: 'Rs ${ground.pricePerHour.toStringAsFixed(0)}',
+                                    text: 'Rs ${ground.priceFrom.toStringAsFixed(0)}',
                                     style: AppTextStyles.price,
                                   ),
                                   TextSpan(text: '/hour', style: AppTextStyles.caption),

@@ -3,7 +3,7 @@ import 'package:image_picker/image_picker.dart';
 import '../models/profile_model.dart';
 import '../services/api_client.dart';
 import '../services/api_exception.dart';
-import '../services/avatar_storage.dart';
+import '../services/photo_storage.dart';
 
 /// The signed-in user's profile and preferences, loaded from the API.
 /// Follows [AuthProvider]: reloads when someone logs in, clears on logout.
@@ -62,20 +62,20 @@ class ProfileProvider extends ChangeNotifier {
   /// Throws [ApiException] with a readable message.
   Future<void> changePhoto(XFile photo) => _savingPhoto(() async {
         final profile = _profile!;
-        final url = await AvatarStorage.upload(profile.id, photo);
+        final url = await PhotoStorage.avatars.upload(profile.id, photo);
         try {
           await updateDetails({'avatar_url': url});
         } on ApiException {
-          AvatarStorage.delete(url); // don't leave the unused upload behind
+          PhotoStorage.avatars.delete(url); // don't leave the unused upload behind
           rethrow;
         }
-        if (profile.avatarUrl.isNotEmpty) AvatarStorage.delete(profile.avatarUrl);
+        if (profile.avatarUrl.isNotEmpty) PhotoStorage.avatars.delete(profile.avatarUrl);
       });
 
   Future<void> removePhoto() => _savingPhoto(() async {
         final oldUrl = _profile!.avatarUrl;
         await updateDetails({'avatar_url': ''});
-        AvatarStorage.delete(oldUrl);
+        PhotoStorage.avatars.delete(oldUrl);
       });
 
   Future<void> _savingPhoto(Future<void> Function() action) async {

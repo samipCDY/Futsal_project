@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/widgets/app_bottom_nav_bar.dart';
+import '../../core/widgets/profile_tab.dart';
 import '../widgets/home_tab.dart';
 import '../widgets/map_tab.dart';
 import '../widgets/bookings_tab.dart';
-import '../widgets/profile_tab.dart';
+import 'favourites_screen.dart';
 
 /// Root shell for the customer module: hosts the bottom nav and swaps
 /// between Home / Map / Bookings / Profile tabs.
@@ -31,7 +32,11 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
     const HomeTab(),
     const MapTab(),
     const BookingsTab(),
-    ProfileTab(onOpenBookings: () => setState(() => _tabIndex = _bookingsTabIndex)),
+    ProfileTab(
+      onOpenBookings: () => setState(() => _tabIndex = _bookingsTabIndex),
+      onOpenFavourites: () =>
+          Navigator.push(context, MaterialPageRoute(builder: (_) => const FavouritesScreen())),
+    ),
   ];
 
   @override

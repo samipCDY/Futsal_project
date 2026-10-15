@@ -5,6 +5,7 @@ from django.utils import timezone
 from rest_framework import serializers, status
 from rest_framework.exceptions import APIException
 
+from accounts.models import Role
 from grounds.models import Ground, slot_has_started
 
 from .models import Booking
@@ -19,15 +20,17 @@ class SlotAlreadyBooked(APIException):
 
 
 class BookingSerializer(serializers.ModelSerializer):
-    ground = serializers.PrimaryKeyRelatedField(queryset=Ground.objects.filter(is_active=True))
+    ground = serializers.PrimaryKeyRelatedField(queryset=Ground.objects.visible())
     ground_name = serializers.CharField(source='ground.name', read_only=True)
     end_time = serializers.TimeField(read_only=True)
+    customer_name = serializers.SerializerMethodField()
+    customer_phone = serializers.SerializerMethodField()
 
     class Meta:
         model = Booking
         fields = [
             'id', 'booking_ref', 'ground', 'ground_name', 'date', 'start_time', 'end_time',
-            'price', 'payment_method', 'status', 'created_at',
+            'price', 'payment_method', 'status', 'created_at', 'customer_name', 'customer_phone',
         ]
         read_only_fields = ['booking_ref', 'price', 'status', 'created_at']
         # Double bookings are caught by the database constraint in create(),
@@ -46,6 +49,17 @@ class BookingSerializer(serializers.ModelSerializer):
                 {'date': f'You can book up to {MAX_DAYS_AHEAD} days ahead.'})
         return attrs
 
+    def _can_see_customer(self, booking):
+        """Who booked is shared only with the ground's owner and admins."""
+        user = self.context['request'].user
+        return user.role == Role.ADMIN or (user.role == Role.GROUND_OWNER and booking.ground.owner_id == user.pk)
+
+    def get_customer_name(self, booking):
+        return booking.customer.full_name if self._can_see_customer(booking) else None
+
+    def get_customer_phone(self, booking):
+        return booking.customer.mobile_number if self._can_see_customer(booking) else None
+
     def to_representation(self, booking):
         data = super().to_representation(booking)
         # Once a confirmed slot's hour is over, the game has been played.
@@ -55,7 +69,7 @@ class BookingSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         validated_data['customer'] = self.context['request'].user
-        validated_data['price'] = validated_data['ground'].price_per_hour
+        validated_data['price'] = validated_data['ground'].price_at(validated_data['start_time'])
         try:
             with transaction.atomic():
                 return super().create(validated_data)

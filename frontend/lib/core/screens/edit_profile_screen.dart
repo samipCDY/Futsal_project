@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import '../../core/constants/app_colors.dart';
-import '../../core/constants/app_text_styles.dart';
-import '../../core/providers/profile_provider.dart';
-import '../../core/services/api_exception.dart';
-import '../../core/utils/time_format.dart';
-import '../../core/utils/validators.dart';
+import '../constants/app_colors.dart';
+import '../constants/app_text_styles.dart';
+import '../providers/profile_provider.dart';
+import '../services/api_exception.dart';
+import '../utils/time_format.dart';
+import '../utils/validators.dart';
 
 const _genders = {'male': 'Male', 'female': 'Female', 'other': 'Other'};
 

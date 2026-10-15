@@ -315,7 +315,7 @@ class _NearbyGroundTile extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text('Rs ${ground.pricePerHour.toStringAsFixed(0)}/hr', style: AppTextStyles.price.copyWith(fontSize: 13)),
+              Text('from Rs ${ground.priceFrom.toStringAsFixed(0)}/hr', style: AppTextStyles.price.copyWith(fontSize: 13)),
               TextButton(
                 style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 28)),
                 onPressed: onBookNow,

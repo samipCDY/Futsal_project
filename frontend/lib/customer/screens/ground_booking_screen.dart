@@ -5,6 +5,7 @@ import '../../core/models/ground_model.dart';
 import '../../core/services/api_exception.dart';
 import '../../core/services/futsal_api.dart';
 import '../../core/utils/time_format.dart';
+import '../../core/widgets/date_strip.dart';
 
 const _daysToShow = 14;
 
@@ -116,23 +117,7 @@ class _GroundBookingScreenState extends State<GroundBookingScreen> {
           const SizedBox(height: 24),
           Text('Pick a date', style: AppTextStyles.subheading),
           const SizedBox(height: 12),
-          SizedBox(
-            height: 64,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: _days.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
-              itemBuilder: (context, index) {
-                final day = _days[index];
-                return _DayChip(
-                  label: index == 0 ? 'Today' : (index == 1 ? 'Tomorrow' : formatDateShort(day)),
-                  sublabel: formatDateShort(day),
-                  selected: day == _selectedDay,
-                  onTap: () => _selectDay(day),
-                );
-              },
-            ),
-          ),
+          DateStrip(days: _days, selected: _selectedDay, onSelected: _selectDay),
           const SizedBox(height: 24),
           Text('Pick a time', style: AppTextStyles.subheading),
           const SizedBox(height: 12),
@@ -169,7 +154,7 @@ class _GroundBookingScreenState extends State<GroundBookingScreen> {
                 : Text(
                     _selectedSlot == null
                         ? 'Select a time'
-                        : 'Book ${formatClock(_selectedSlot!.startTime)} · Rs ${ground.pricePerHour.toStringAsFixed(0)}',
+                        : 'Book ${formatClock(_selectedSlot!.startTime)} · Rs ${_selectedSlot!.price.toStringAsFixed(0)}',
                     style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
                   ),
           ),
@@ -203,7 +188,13 @@ class _GroundBookingScreenState extends State<GroundBookingScreen> {
       children: [
         for (final slot in slots)
           ChoiceChip(
-            label: Text(formatClock(slot.startTime)),
+            label: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(formatClock(slot.startTime)),
+                Text('Rs ${slot.price.toStringAsFixed(0)}', style: const TextStyle(fontSize: 11)),
+              ],
+            ),
             selected: _selectedSlot == slot,
             onSelected: slot.available ? (_) => setState(() => _selectedSlot = slot) : null,
             selectedColor: AppColors.primaryGreen,
@@ -232,24 +223,31 @@ class _GroundSummary extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppColors.divider),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.location_on_outlined, color: AppColors.textSecondary),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              ground.address.isEmpty ? ground.area : '${ground.address}, ${ground.area}',
-              style: AppTextStyles.body,
-            ),
+          Row(
+            children: [
+              Icon(Icons.location_on_outlined, color: AppColors.textSecondary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  ground.address.isEmpty ? ground.area : '${ground.address}, ${ground.area}',
+                  style: AppTextStyles.body,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-          RichText(
-            text: TextSpan(
-              children: [
-                TextSpan(text: 'Rs ${ground.pricePerHour.toStringAsFixed(0)}', style: AppTextStyles.price),
-                TextSpan(text: '/hour', style: AppTextStyles.caption),
-              ],
-            ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _Rate(label: 'Morning', hours: 'before ${formatClock('$dayStartsHour:00')}', price: ground.morningPrice,
+                  isPeak: ground.peakPrice == ground.morningPrice),
+              _Rate(label: 'Day', hours: '${formatClock('$dayStartsHour:00')} – ${formatClock('$eveningStartsHour:00')}',
+                  price: ground.dayPrice, isPeak: ground.peakPrice == ground.dayPrice),
+              _Rate(label: 'Evening', hours: 'from ${formatClock('$eveningStartsHour:00')}', price: ground.eveningPrice,
+                  isPeak: ground.peakPrice == ground.eveningPrice),
+            ],
           ),
         ],
       ),
@@ -257,41 +255,39 @@ class _GroundSummary extends StatelessWidget {
   }
 }
 
-class _DayChip extends StatelessWidget {
+/// One of the ground's three hourly rates; the highest is marked "Peak".
+class _Rate extends StatelessWidget {
   final String label;
-  final String sublabel;
-  final bool selected;
-  final VoidCallback onTap;
+  final String hours;
+  final double price;
+  final bool isPeak;
 
-  const _DayChip({required this.label, required this.sublabel, required this.selected, required this.onTap});
+  const _Rate({required this.label, required this.hours, required this.price, required this.isPeak});
 
   @override
   Widget build(BuildContext context) {
-    final showSublabel = label != sublabel;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        width: 84,
-        decoration: BoxDecoration(
-          color: selected ? AppColors.primaryGreen : AppColors.surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: selected ? AppColors.primaryGreen : AppColors.divider),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              label,
-              style: TextStyle(fontWeight: FontWeight.w600, color: selected ? Colors.white : AppColors.textPrimary),
-            ),
-            if (showSublabel)
-              Text(
-                sublabel,
-                style: TextStyle(fontSize: 12, color: selected ? Colors.white70 : AppColors.textSecondary),
-              ),
-          ],
-        ),
+    return Expanded(
+      child: Column(
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(label, style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w600)),
+              if (isPeak) ...[
+                const SizedBox(width: 4),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                  decoration: BoxDecoration(color: AppColors.badgeOrangeBg, borderRadius: BorderRadius.circular(6)),
+                  child: Text('Peak', style: TextStyle(fontSize: 10, color: AppColors.accentOrange,
+                      fontWeight: FontWeight.w700)),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text('Rs ${price.toStringAsFixed(0)}', style: AppTextStyles.price.copyWith(fontSize: 15)),
+          Text(hours, style: AppTextStyles.caption.copyWith(fontSize: 11), textAlign: TextAlign.center),
+        ],
       ),
     );
   }
