@@ -1,8 +1,14 @@
 # Backend
 
 Django + Django REST Framework, serving the Flutter app in `../frontend`
-over a JSON API. SQLite by default (zero setup); switch to PostgreSQL later
-by setting `DATABASE_ENGINE=postgres` in `.env` (see `.env.example`).
+over a JSON API.
+
+- **Login** is handled by Supabase Auth. The app sends the user's Supabase
+  access token as `Authorization: Bearer <token>`; Django verifies it against
+  Supabase's public keys (`accounts/authentication.py`).
+- **Database** is the Supabase Postgres database. Django's tables live in a
+  separate `django` schema so Supabase's public API can't read them; app
+  users and their roles are read from Supabase's `public.profiles`.
 
 ## Setup
 
@@ -10,27 +16,40 @@ by setting `DATABASE_ENGINE=postgres` in `.env` (see `.env.example`).
 python -m venv venv
 venv\Scripts\activate
 pip install -r requirements.txt
+copy .env.example .env      (then fill in DATABASE_PASSWORD)
 python manage.py migrate
+python manage.py createsuperuser
 python manage.py runserver 8000
 ```
 
-By default OTP emails are printed to this console instead of actually being
-sent (no email account needed to develop). To send real emails, copy
-`.env.example` to `.env`, set `EMAIL_BACKEND=smtp`, and fill in real SMTP
-credentials (e.g. a Gmail account with an App Password).
+Admin panel: http://localhost:8000/admin/ — add grounds there, and change a
+user's role (Profiles) to make them a ground owner or admin.
+
+Run the tests with `python manage.py test`.
 
 ### Testing from the Flutter app
 
 - **Chrome / desktop**: works immediately, same machine.
 - **Physical Android device over USB**: run `adb reverse tcp:8000 tcp:8000`
-  once per debugging session — this forwards the phone's own
-  `localhost:8000` to this PC's Django server over the same USB connection
-  `flutter run` already uses.
+  once per debugging session.
+
+## API
+
+All endpoints need a Supabase access token.
+
+| Method | Path | Who | What |
+|---|---|---|---|
+| GET | `/api/accounts/me/` | anyone | the signed-in user's profile |
+| GET | `/api/grounds/` | anyone | active grounds |
+| GET | `/api/grounds/<id>/` | anyone | one ground |
+| GET | `/api/grounds/<id>/slots/?date=YYYY-MM-DD` | anyone | 1-hour slots and whether each is free |
+| GET | `/api/bookings/` | anyone | customer: own · owner: at their grounds · admin: all |
+| POST | `/api/bookings/` | customer | book `{ground, date, start_time}` (409 if just taken) |
+| POST | `/api/bookings/<id>/cancel/` | as above | cancel an upcoming booking |
 
 ## Apps
 
-- `accounts` — email OTP verification is live (`/api/accounts/otp/send/`,
-  `/api/accounts/otp/verify/`). User auth/roles/profiles come next.
-- `grounds` — ground listings, availability, images, pricing (not started)
-- `bookings` — slot booking, booking status, payments (not started)
-- `reviews` — ratings shown on ground cards in the app (not started)
+- `accounts` — Supabase token login, `Profile` (Supabase users), role permissions
+- `grounds` — ground listings, opening hours, slot availability
+- `bookings` — 1-hour slot bookings; the database blocks double bookings
+- `reviews` — ratings shown on ground cards (not started)

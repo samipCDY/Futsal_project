@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 import os
+import sys
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -46,6 +47,8 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
     'accounts',
+    'grounds',
+    'bookings',
 ]
 
 # Use the project's email-based account model instead of Django's default
@@ -92,10 +95,15 @@ WSGI_APPLICATION = 'futsal_backend.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-# Defaults to SQLite (zero setup). Set DATABASE_ENGINE=postgres in .env
-# once PostgreSQL is installed and DATABASE_NAME/USER/PASSWORD/HOST/PORT
-# are filled in (see .env.example).
-if os.environ.get('DATABASE_ENGINE') == 'postgres':
+# Set DATABASE_ENGINE=postgres in .env and fill in the Supabase connection
+# details (see .env.example). Django's own tables go in a separate `django`
+# schema (see accounts/apps.py) so Supabase's public API can't reach them,
+# while app users are read from Supabase's `public.profiles`.
+# SQLite still works for Django admin tinkering, but anything that touches
+# users (login, bookings) needs the Supabase database.
+# Tests always run on a throwaway local SQLite database, never on Supabase.
+RUNNING_TESTS = len(sys.argv) > 1 and sys.argv[1] == 'test'
+if os.environ.get('DATABASE_ENGINE') == 'postgres' and not RUNNING_TESTS:
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
@@ -139,7 +147,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Asia/Kathmandu'
 
 USE_I18N = True
 
@@ -157,21 +165,13 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
-# Email (OTP delivery)
-# Defaults to printing emails to the console so OTP works with zero setup.
-# Set EMAIL_BACKEND=smtp in .env once you have real SMTP credentials
-# (e.g. a Gmail account with an App Password, or a provider like Brevo).
-if os.environ.get('EMAIL_BACKEND') == 'smtp':
-    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-    EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.gmail.com')
-    EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587'))
-    EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True') == 'True'
-    EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
-    EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
-    DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', EMAIL_HOST_USER)
-else:
-    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-    DEFAULT_FROM_EMAIL = 'noreply@futsalfinder.local'
+# Supabase: the app signs users in there and sends their access token to
+# this API. Tokens are checked against Supabase's public keys (no secret).
+SUPABASE_URL = os.environ.get('SUPABASE_URL', 'https://oauxglvqzjjaaezqapkl.supabase.co')
+SUPABASE_JWT_ISSUER = f'{SUPABASE_URL}/auth/v1'
+SUPABASE_JWKS_URL = f'{SUPABASE_JWT_ISSUER}/.well-known/jwks.json'
 
-OTP_EXPIRY_MINUTES = 10
-OTP_MAX_ATTEMPTS = 5
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': ['accounts.authentication.SupabaseJWTAuthentication'],
+    'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated'],
+}

@@ -1,15 +1,12 @@
-import random
-from datetime import timedelta
-
-from django.conf import settings
 from django.contrib.auth.base_user import AbstractBaseUser, BaseUserManager
 from django.contrib.auth.models import PermissionsMixin
 from django.db import models
-from django.utils import timezone
 
 
-def generate_code():
-    return f"{random.randint(0, 999999):06d}"
+class Role(models.TextChoices):
+    CUSTOMER = 'customer', 'Customer'
+    GROUND_OWNER = 'ground_owner', 'Ground Owner'
+    ADMIN = 'admin', 'Admin'
 
 
 class UserManager(BaseUserManager):
@@ -25,20 +22,15 @@ class UserManager(BaseUserManager):
     def create_superuser(self, email, password=None, **extra_fields):
         extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('is_superuser', True)
-        extra_fields.setdefault('role', User.Role.ADMIN)
+        extra_fields.setdefault('role', Role.ADMIN)
         return self.create_user(email, password, **extra_fields)
 
 
 class User(AbstractBaseUser, PermissionsMixin):
-    """The one shared account model for every role — customer, ground
-    owner, and admin all log in with email + password here, distinguished
-    only by `role`. Matches the single-login-screen design on the Flutter
-    side (see UserRole in the frontend)."""
+    """Login for the Django admin panel only (`createsuperuser`). App users
+    sign in through Supabase and are represented by `Profile` instead."""
 
-    class Role(models.TextChoices):
-        CUSTOMER = 'customer', 'Customer'
-        GROUND_OWNER = 'ground_owner', 'Ground Owner'
-        ADMIN = 'admin', 'Admin'
+    Role = Role
 
     email = models.EmailField(unique=True)
     full_name = models.CharField(max_length=150, blank=True)
@@ -53,25 +45,36 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     objects = UserManager()
 
+    class Meta:
+        verbose_name = 'admin login'
+
     def __str__(self):
         return self.email
 
 
-class EmailOTP(models.Model):
-    email = models.EmailField(db_index=True)
-    code = models.CharField(max_length=6, default=generate_code)
-    created_at = models.DateTimeField(auto_now_add=True)
-    expires_at = models.DateTimeField()
-    is_verified = models.BooleanField(default=False)
-    attempts = models.PositiveSmallIntegerField(default=0)
+class Profile(models.Model):
+    """An app user, read straight from Supabase's `public.profiles` table
+    (created by the trigger in supabase/migrations). Django never creates or
+    migrates this table — Supabase owns it.
 
-    def save(self, *args, **kwargs):
-        if not self.expires_at:
-            self.expires_at = timezone.now() + timedelta(minutes=settings.OTP_EXPIRY_MINUTES)
-        super().save(*args, **kwargs)
+    `SupabaseJWTAuthentication` sets `request.user` to one of these, so the
+    two flags below let DRF treat it like a logged-in user.
+    """
 
-    def is_expired(self):
-        return timezone.now() > self.expires_at
+    is_authenticated = True
+    is_anonymous = False
+
+    id = models.UUIDField(primary_key=True)
+    email = models.TextField(blank=True)
+    full_name = models.TextField(blank=True)
+    mobile_number = models.TextField(blank=True)
+    role = models.TextField(choices=Role.choices, default=Role.CUSTOMER)
+    created_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'profiles'
+        verbose_name = 'app user (customer / owner)'
 
     def __str__(self):
-        return f"{self.email} - {self.code}"
+        return self.full_name or str(self.id)

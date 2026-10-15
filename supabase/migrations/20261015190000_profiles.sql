@@ -9,6 +9,7 @@
 
 create table if not exists public.profiles (
   id            uuid primary key references auth.users (id) on delete cascade,
+  email         text not null,
   full_name     text not null default '',
   mobile_number text not null default '',
   role          text not null default 'customer'
@@ -48,9 +49,10 @@ security definer
 set search_path = ''
 as $$
 begin
-  insert into public.profiles (id, full_name, mobile_number, role)
+  insert into public.profiles (id, email, full_name, mobile_number, role)
   values (
     new.id,
+    new.email,
     coalesce(new.raw_user_meta_data ->> 'full_name', ''),
     coalesce(new.raw_user_meta_data ->> 'mobile_number', ''),
     case
@@ -70,9 +72,10 @@ create trigger on_auth_user_created
 
 -- Backfill profiles for anyone who signed up before this migration
 -- (same rule: never admin from metadata).
-insert into public.profiles (id, full_name, mobile_number, role)
+insert into public.profiles (id, email, full_name, mobile_number, role)
 select
   u.id,
+  u.email,
   coalesce(u.raw_user_meta_data ->> 'full_name', ''),
   coalesce(u.raw_user_meta_data ->> 'mobile_number', ''),
   case
