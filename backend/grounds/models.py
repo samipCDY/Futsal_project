@@ -52,3 +52,18 @@ class Ground(models.Model):
         """Start times of every bookable 1-hour slot in a day."""
         first = self.opens_at.hour + (1 if self.opens_at.minute or self.opens_at.second else 0)
         return [time(hour) for hour in range(first, self.closes_at.hour)]
+
+
+class Favourite(models.Model):
+    """A ground a customer has saved with the heart button."""
+
+    customer = models.ForeignKey(Profile, on_delete=models.DO_NOTHING, db_constraint=False, related_name='favourites')
+    ground = models.ForeignKey(Ground, on_delete=models.CASCADE, related_name='favourited_by')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        constraints = [models.UniqueConstraint(fields=['customer', 'ground'], name='favourite_once')]
+
+    def __str__(self):
+        return f'{self.customer} ♥ {self.ground}'

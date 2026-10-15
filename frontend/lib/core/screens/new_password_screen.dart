@@ -78,9 +78,9 @@ class _NewPasswordScreenState extends State<NewPasswordScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: 12),
-              const Icon(Icons.password_outlined, size: 56, color: AppColors.primaryGreen),
+              Icon(Icons.password_outlined, size: 56, color: AppColors.primaryGreen),
               const SizedBox(height: 20),
-              const Text(
+              Text(
                 'Choose a new password',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: AppColors.textPrimary),
@@ -149,7 +149,7 @@ class _PasswordField extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(Icons.lock_outline, color: AppColors.textSecondary, size: 20),
+          Icon(Icons.lock_outline, color: AppColors.textSecondary, size: 20),
           const SizedBox(width: 10),
           Expanded(
             child: TextField(
@@ -159,7 +159,7 @@ class _PasswordField extends StatelessWidget {
                 isDense: true,
                 border: InputBorder.none,
                 hintText: hintText,
-                hintStyle: const TextStyle(color: AppColors.textSecondary),
+                hintStyle: TextStyle(color: AppColors.textSecondary),
               ),
             ),
           ),

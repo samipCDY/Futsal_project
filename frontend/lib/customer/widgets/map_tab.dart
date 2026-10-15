@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_text_styles.dart';
-import '../../core/mock/mock_grounds.dart';
 import '../../core/models/ground_model.dart';
+import '../../core/services/api_exception.dart';
+import '../../core/services/futsal_api.dart';
+import '../../core/services/location_service.dart';
+import '../screens/ground_booking_screen.dart';
 import 'ground_search_bar.dart';
 import 'map_ground_pin.dart';
 import 'map_controls.dart';
-
-const _distance = Distance();
 
 /// Yango/inDrive-style location picker: a pin fixed at the screen centre
 /// while the map pans underneath it. Confirming reads whatever coordinate
@@ -29,27 +29,27 @@ class _MapTabState extends State<MapTab> {
 
   LatLng? _pinnedCenter;
   List<GroundModel>? _nearbyGrounds;
+  List<GroundModel>? _grounds;
 
   @override
   void initState() {
     super.initState();
     _initLocation();
+    _loadGrounds();
+  }
+
+  Future<void> _loadGrounds() async {
+    try {
+      final grounds = await FutsalApi.fetchGrounds();
+      if (mounted) setState(() => _grounds = grounds);
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
   }
 
   Future<void> _initLocation() async {
-    if (!await Geolocator.isLocationServiceEnabled()) return;
-
-    var permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-    }
-    if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
-      return;
-    }
-
-    final position = await Geolocator.getCurrentPosition();
-    if (!mounted) return;
-    final location = LatLng(position.latitude, position.longitude);
+    final location = await LocationService.current();
+    if (!mounted || location == null) return;
     setState(() => _myLocation = location);
     if (!_hasCenteredOnMyLocation) {
       _hasCenteredOnMyLocation = true;
@@ -69,13 +69,12 @@ class _MapTabState extends State<MapTab> {
     _mapController.move(_mapController.camera.center, _mapController.camera.zoom + delta);
   }
 
-  void _confirmLocation() {
+  Future<void> _confirmLocation() async {
+    if (_grounds == null) await _loadGrounds();
+    if (!mounted || _grounds == null) return;
     final center = _mapController.camera.center;
-    final sorted = [...mockGrounds]..sort((a, b) {
-      final distanceA = _distance.as(LengthUnit.Kilometer, center, LatLng(a.latitude, a.longitude));
-      final distanceB = _distance.as(LengthUnit.Kilometer, center, LatLng(b.latitude, b.longitude));
-      return distanceA.compareTo(distanceB);
-    });
+    final sorted = [..._grounds!]..sort((a, b) =>
+        LocationService.kmBetween(center, a.location).compareTo(LocationService.kmBetween(center, b.location)));
     setState(() {
       _pinnedCenter = center;
       _nearbyGrounds = sorted;
@@ -92,7 +91,7 @@ class _MapTabState extends State<MapTab> {
         FlutterMap(
           mapController: _mapController,
           options: MapOptions(
-            initialCenter: LatLng(mockGrounds.first.latitude, mockGrounds.first.longitude),
+            initialCenter: LocationService.fallback,
             initialZoom: 15,
             onPositionChanged: (camera, hasGesture) {
               if (hasGesture && _nearbyGrounds != null) _changeLocation();
@@ -176,6 +175,10 @@ class _MapTabState extends State<MapTab> {
                       grounds: _nearbyGrounds!,
                       pinnedCenter: _pinnedCenter!,
                       onChangeLocation: _changeLocation,
+                      onBookNow: (ground) => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => GroundBookingScreen(ground: ground)),
+                      ),
                     ),
                 ],
               ),
@@ -197,7 +200,7 @@ class _CenterPin extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.location_on, size: 44, color: AppColors.darkGreen),
+          Icon(Icons.location_on, size: 44, color: AppColors.darkGreen),
           Container(
             width: 8,
             height: 3,
@@ -216,11 +219,13 @@ class _NearbyGroundsPanel extends StatelessWidget {
   final List<GroundModel> grounds;
   final LatLng pinnedCenter;
   final VoidCallback onChangeLocation;
+  final ValueChanged<GroundModel> onBookNow;
 
   const _NearbyGroundsPanel({
     required this.grounds,
     required this.pinnedCenter,
     required this.onChangeLocation,
+    required this.onBookNow,
   });
 
   @override
@@ -249,17 +254,17 @@ class _NearbyGroundsPanel extends StatelessWidget {
               ],
             ),
           ),
-          const Divider(height: 1, color: AppColors.divider),
+          Divider(height: 1, color: AppColors.divider),
           Flexible(
             child: ListView.separated(
               shrinkWrap: true,
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               itemCount: grounds.length,
-              separatorBuilder: (_, __) => const Divider(height: 1, color: AppColors.divider),
+              separatorBuilder: (_, __) => Divider(height: 1, color: AppColors.divider),
               itemBuilder: (context, index) {
                 final ground = grounds[index];
-                final km = _distance.as(LengthUnit.Kilometer, pinnedCenter, LatLng(ground.latitude, ground.longitude));
-                return _NearbyGroundTile(ground: ground, distanceKm: km, onBookNow: () {});
+                final km = LocationService.kmBetween(pinnedCenter, ground.location);
+                return _NearbyGroundTile(ground: ground, distanceKm: km, onBookNow: () => onBookNow(ground));
               },
             ),
           ),
@@ -302,13 +307,7 @@ class _NearbyGroundTile extends StatelessWidget {
               children: [
                 Text(ground.name, style: AppTextStyles.subheading.copyWith(fontSize: 14)),
                 const SizedBox(height: 2),
-                Row(
-                  children: [
-                    const Icon(Icons.star, size: 12, color: AppColors.rating),
-                    const SizedBox(width: 3),
-                    Text('${ground.rating} · ${distanceKm.toStringAsFixed(1)} km', style: AppTextStyles.caption),
-                  ],
-                ),
+                Text('${ground.area} · ${distanceKm.toStringAsFixed(1)} km', style: AppTextStyles.caption),
               ],
             ),
           ),

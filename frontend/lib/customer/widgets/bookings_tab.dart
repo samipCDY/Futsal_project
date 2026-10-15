@@ -2,38 +2,9 @@ import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_text_styles.dart';
 import '../../core/models/booking_model.dart';
+import '../../core/services/api_exception.dart';
+import '../../core/services/futsal_api.dart';
 import 'booking_card.dart';
-
-const _mockBookings = [
-  BookingModel(
-    id: 'b1',
-    bookingRef: '#FB-1042',
-    groundName: 'Kathmandu Futsal Arena',
-    status: BookingStatus.confirmed,
-    dateLabel: 'Wed 15 Jul 2026',
-    timeLabel: '6:00–7:00 PM',
-    price: 1400,
-    paymentMethod: 'Khalti',
-  ),
-  BookingModel(
-    id: 'b2',
-    bookingRef: '#FB-1055',
-    groundName: 'New Baneshwor Futsal Hub',
-    status: BookingStatus.pending,
-    dateLabel: 'Sat 18 Jul 2026',
-    timeLabel: '8:00–9:00 PM',
-    price: 1200,
-  ),
-  BookingModel(
-    id: 'b3',
-    bookingRef: '#FB-0988',
-    groundName: 'Kathmandu Futsal Arena',
-    status: BookingStatus.completed,
-    dateLabel: 'Sun 12 Jul 2026',
-    timeLabel: '7:00–8:00 PM',
-    price: 1400,
-  ),
-];
 
 class BookingsTab extends StatefulWidget {
   const BookingsTab({super.key});
@@ -44,12 +15,73 @@ class BookingsTab extends StatefulWidget {
 
 class _BookingsTabState extends State<BookingsTab> {
   int _segment = 0;
+  List<BookingModel>? _bookings;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+    FutsalApi.bookingsChanged.addListener(_load);
+  }
+
+  @override
+  void dispose() {
+    FutsalApi.bookingsChanged.removeListener(_load);
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    try {
+      final bookings = await FutsalApi.fetchMyBookings();
+      if (!mounted) return;
+      setState(() {
+        _bookings = bookings;
+        _error = null;
+      });
+    } on ApiException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    }
+  }
+
+  Future<void> _cancel(BookingModel booking) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cancel this booking?'),
+        content: Text('${booking.groundName}\n${booking.dateLabel} · ${booking.timeLabel}'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Keep it')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.dangerText),
+            child: const Text('Cancel booking'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await FutsalApi.cancelBooking(booking.id); // the listener reloads the list
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Booking cancelled.')));
+      }
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final bookings = _mockBookings
-        .where((b) => _segment == 0 ? b.status != BookingStatus.completed : b.status == BookingStatus.completed)
-        .toList();
+    final upcoming = _segment == 0;
+    final bookings = (_bookings ?? []).where((b) => b.isUpcoming == upcoming).toList();
+    // The API sends newest first; upcoming games read better soonest first.
+    if (upcoming) {
+      bookings.sort((a, b) => a.date.compareTo(b.date) != 0
+          ? a.date.compareTo(b.date)
+          : a.startTime.compareTo(b.startTime));
+    }
 
     return SafeArea(
       bottom: false,
@@ -71,14 +103,42 @@ class _BookingsTabState extends State<BookingsTab> {
             ),
           ),
           Expanded(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-              children: [
-                for (final booking in bookings) ...[
-                  BookingCard(booking: booking),
-                  const SizedBox(height: 16),
+            child: RefreshIndicator(
+              onRefresh: _load,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                children: [
+                  if (_bookings == null && _error == null)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 32),
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  else if (_bookings == null)
+                    Column(
+                      children: [
+                        Text(_error!, style: AppTextStyles.body, textAlign: TextAlign.center),
+                        TextButton(onPressed: _load, child: const Text('Try again')),
+                      ],
+                    )
+                  else if (bookings.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 32),
+                      child: Text(
+                        upcoming ? 'No upcoming bookings. Find a ground on the Home tab!' : 'No past bookings yet.',
+                        style: AppTextStyles.body,
+                        textAlign: TextAlign.center,
+                      ),
+                    )
+                  else
+                    for (final booking in bookings) ...[
+                      BookingCard(
+                        booking: booking,
+                        onCancel: booking.isUpcoming ? () => _cancel(booking) : null,
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                 ],
-              ],
+              ),
             ),
           ),
         ],

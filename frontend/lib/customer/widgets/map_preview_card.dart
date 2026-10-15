@@ -14,7 +14,7 @@ class MapPreviewCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(16),
       child: Container(
         height: 170,
-        decoration: const BoxDecoration(color: Color(0xFFDCE6DD)),
+        decoration: BoxDecoration(color: AppColors.mapPreviewBg),
         child: Stack(
           children: [
             CustomPaint(size: Size.infinite, painter: _MapGridPainter()),
@@ -23,10 +23,10 @@ class MapPreviewCard extends StatelessWidget {
               bottom: 16,
               child: ElevatedButton.icon(
                 onPressed: onMapViewTap,
-                icon: const Icon(Icons.map_outlined, size: 18, color: AppColors.textPrimary),
-                label: const Text('Map view', style: TextStyle(color: AppColors.textPrimary)),
+                icon: Icon(Icons.map_outlined, size: 18, color: AppColors.textPrimary),
+                label: Text('Map view', style: TextStyle(color: AppColors.textPrimary)),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
+                  backgroundColor: AppColors.surface,
                   elevation: 2,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),

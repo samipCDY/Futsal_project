@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../constants/app_colors.dart';
 import '../models/user_role.dart';
 import '../services/auth_api.dart';
+import '../utils/validators.dart';
 import 'otp_verification_screen.dart';
 
 String roleLabel(UserRole role) {
@@ -55,6 +57,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please fill in your name, mobile number, and email')),
       );
+      return;
+    }
+    final error = mobileError(_mobileController.text) ?? emailError(_emailController.text);
+    if (error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
       return;
     }
     if (_passwordController.text.length < 8) {
@@ -148,9 +155,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
               // Admin isn't self-service — those accounts get provisioned separately.
               for (final role in const [UserRole.customer, UserRole.groundOwner])
                 ListTile(
-                  leading: const Icon(Icons.badge_outlined, color: AppColors.primaryGreen),
+                  leading: Icon(Icons.badge_outlined, color: AppColors.primaryGreen),
                   title: Text(roleLabel(role)),
-                  trailing: _selectedRole == role ? const Icon(Icons.check, color: AppColors.primaryGreen) : null,
+                  trailing: _selectedRole == role ? Icon(Icons.check, color: AppColors.primaryGreen) : null,
                   onTap: () {
                     setState(() => _selectedRole = role);
                     Navigator.of(sheetContext).pop();
@@ -259,10 +266,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Text('Already have an account? ', style: TextStyle(color: AppColors.textSecondary)),
+                        Text('Already have an account? ', style: TextStyle(color: AppColors.textSecondary)),
                         GestureDetector(
                           onTap: () => Navigator.of(context).maybePop(),
-                          child: const Text(
+                          child: Text(
                             'Login',
                             style: TextStyle(color: AppColors.primaryGreen, fontWeight: FontWeight.w700),
                           ),
@@ -291,17 +298,17 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(8, 12, 20, 16),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: AppColors.divider)),
       ),
       child: Row(
         children: [
           IconButton(
             onPressed: onBack,
-            icon: const Icon(Icons.arrow_back, color: AppColors.primaryGreen),
+            icon: Icon(Icons.arrow_back, color: AppColors.primaryGreen),
           ),
           const SizedBox(width: 4),
-          const Text(
+          Text(
             'Create Account',
             style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: AppColors.primaryGreen),
           ),
@@ -322,7 +329,7 @@ class _FieldLabel extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 8),
       child: Text(
         text,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w700,
           letterSpacing: 0.6,
@@ -373,7 +380,7 @@ class _SignupField extends StatelessWidget {
                 isDense: true,
                 border: InputBorder.none,
                 hintText: hintText,
-                hintStyle: const TextStyle(color: AppColors.textSecondary),
+                hintStyle: TextStyle(color: AppColors.textSecondary),
               ),
             ),
           ),
@@ -427,7 +434,7 @@ class _UserTypeField extends StatelessWidget {
         ),
         child: Row(
           children: [
-            const Icon(Icons.badge_outlined, color: AppColors.textSecondary, size: 20),
+            Icon(Icons.badge_outlined, color: AppColors.textSecondary, size: 20),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
@@ -438,7 +445,7 @@ class _UserTypeField extends StatelessWidget {
                 ),
               ),
             ),
-            const Icon(Icons.keyboard_arrow_down, color: AppColors.textSecondary),
+            Icon(Icons.keyboard_arrow_down, color: AppColors.textSecondary),
           ],
         ),
       ),
@@ -463,7 +470,7 @@ class _MobileNumberField extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Text('+977', style: TextStyle(color: AppColors.primaryGreen, fontWeight: FontWeight.w700, fontSize: 15)),
+          Text('+977', style: TextStyle(color: AppColors.primaryGreen, fontWeight: FontWeight.w700, fontSize: 15)),
           const SizedBox(width: 10),
           Container(width: 1, height: 24, color: AppColors.divider),
           const SizedBox(width: 12),
@@ -472,7 +479,8 @@ class _MobileNumberField extends StatelessWidget {
               controller: controller,
               keyboardType: TextInputType.phone,
               maxLength: 10,
-              decoration: const InputDecoration(
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: InputDecoration(
                 isDense: true,
                 border: InputBorder.none,
                 counterText: '',
@@ -508,20 +516,20 @@ class _TermsCheckbox extends StatelessWidget {
           ),
           Expanded(
             child: RichText(
-              text: const TextSpan(
+              text: TextSpan(
                 style: TextStyle(color: AppColors.textPrimary, fontSize: 13),
                 children: [
-                  TextSpan(text: 'I agree to the '),
+                  const TextSpan(text: 'I agree to the '),
                   TextSpan(
                     text: 'Terms & Conditions',
                     style: TextStyle(color: AppColors.primaryGreen, fontWeight: FontWeight.w700),
                   ),
-                  TextSpan(text: ' and '),
+                  const TextSpan(text: ' and '),
                   TextSpan(
                     text: 'Privacy Policy',
                     style: TextStyle(color: AppColors.primaryGreen, fontWeight: FontWeight.w700),
                   ),
-                  TextSpan(text: '.'),
+                  const TextSpan(text: '.'),
                 ],
               ),
             ),
@@ -540,8 +548,8 @@ class _SecureFooter extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 20),
-      decoration: const BoxDecoration(
-        color: Color(0xFFF0F2F0),
+      decoration: BoxDecoration(
+        color: AppColors.subtleFill,
         border: Border(top: BorderSide(color: AppColors.divider)),
       ),
       child: Column(
@@ -557,7 +565,7 @@ class _SecureFooter extends StatelessWidget {
           const SizedBox(height: 10),
           Text(
             '© ${DateTime.now().year} Management. All rights reserved.',
-            style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
           ),
         ],
       ),
@@ -580,7 +588,7 @@ class _FooterBadge extends StatelessWidget {
         Text(
           label,
           textAlign: TextAlign.center,
-          style: const TextStyle(color: AppColors.textSecondary, fontSize: 10, letterSpacing: 0.5),
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 10, letterSpacing: 0.5),
         ),
       ],
     );

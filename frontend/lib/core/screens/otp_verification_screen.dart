@@ -143,7 +143,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       appBar: AppBar(
         backgroundColor: AppColors.background,
         elevation: 0,
-        iconTheme: const IconThemeData(color: AppColors.primaryGreen),
+        iconTheme: IconThemeData(color: AppColors.primaryGreen),
       ),
       body: SafeArea(
         child: Padding(
@@ -152,20 +152,20 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: 12),
-              const Icon(Icons.mark_email_read_outlined, size: 56, color: AppColors.primaryGreen),
+              Icon(Icons.mark_email_read_outlined, size: 56, color: AppColors.primaryGreen),
               const SizedBox(height: 20),
               Text(
                 widget.title,
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: AppColors.textPrimary),
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: AppColors.textPrimary),
               ),
               const SizedBox(height: 8),
               Text.rich(
                 TextSpan(
-                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
+                  style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
                   children: [
                     const TextSpan(text: 'We sent a 6-digit code to '),
-                    TextSpan(text: widget.email, style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+                    TextSpan(text: widget.email, style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
                   ],
                 ),
                 textAlign: TextAlign.center,
@@ -182,7 +182,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
               ),
               if (_errorText != null) ...[
                 const SizedBox(height: 12),
-                Text(_errorText!, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.dangerText, fontSize: 13)),
+                Text(_errorText!, textAlign: TextAlign.center, style: TextStyle(color: AppColors.dangerText, fontSize: 13)),
               ],
               const SizedBox(height: 28),
               ElevatedButton(
@@ -206,13 +206,13 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
                 child: _secondsUntilResend > 0
                     ? Text(
                         'Resend code in ${_secondsUntilResend}s',
-                        style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                        style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
                       )
                     : TextButton(
                         onPressed: _isResending ? null : _resend,
                         child: Text(
                           _isResending ? 'Sending...' : 'Resend code',
-                          style: const TextStyle(color: AppColors.primaryGreen, fontWeight: FontWeight.w700),
+                          style: TextStyle(color: AppColors.primaryGreen, fontWeight: FontWeight.w700),
                         ),
                       ),
               ),
@@ -260,7 +260,7 @@ class _DigitBox extends StatelessWidget {
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: AppColors.primaryGreen, width: 2),
+            borderSide: BorderSide(color: AppColors.primaryGreen, width: 2),
           ),
         ),
       ),

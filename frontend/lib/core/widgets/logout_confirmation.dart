@@ -16,11 +16,11 @@ Future<void> confirmAndSignOut(BuildContext context) async {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(dialogContext).pop(false),
-          child: const Text('Cancel', style: TextStyle(color: AppColors.textSecondary)),
+          child: Text('Cancel', style: TextStyle(color: AppColors.textSecondary)),
         ),
         TextButton(
           onPressed: () => Navigator.of(dialogContext).pop(true),
-          child: const Text('Logout', style: TextStyle(color: AppColors.primaryGreen, fontWeight: FontWeight.w700)),
+          child: Text('Logout', style: TextStyle(color: AppColors.primaryGreen, fontWeight: FontWeight.w700)),
         ),
       ],
     ),

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_text_styles.dart';
+import '../../core/widgets/profile_avatar.dart';
 
 class LocationHeader extends StatelessWidget {
   final String initials;
+  final String photoUrl;
   final String locationLabel;
   final bool hasNotification;
   final VoidCallback? onLocationTap;
@@ -12,6 +14,7 @@ class LocationHeader extends StatelessWidget {
   const LocationHeader({
     super.key,
     required this.initials,
+    this.photoUrl = '',
     required this.locationLabel,
     this.hasNotification = false,
     this.onLocationTap,
@@ -22,18 +25,7 @@ class LocationHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        CircleAvatar(
-          radius: 18,
-          backgroundColor: AppColors.primaryGreen.withValues(alpha: 0.12),
-          child: Text(
-            initials,
-            style: const TextStyle(
-              color: AppColors.primaryGreen,
-              fontWeight: FontWeight.w700,
-              fontSize: 13,
-            ),
-          ),
-        ),
+        ProfileAvatar(photoUrl: photoUrl, initials: initials, size: 36),
         const SizedBox(width: 12),
         Expanded(
           child: GestureDetector(
@@ -54,7 +46,7 @@ class LocationHeader extends StatelessWidget {
                       locationLabel,
                       style: AppTextStyles.subheading.copyWith(color: AppColors.primaryGreen),
                     ),
-                    const Icon(Icons.keyboard_arrow_down, color: AppColors.primaryGreen, size: 20),
+                    Icon(Icons.keyboard_arrow_down, color: AppColors.primaryGreen, size: 20),
                   ],
                 ),
               ],
@@ -66,7 +58,7 @@ class LocationHeader extends StatelessWidget {
           children: [
             IconButton(
               onPressed: onNotificationTap,
-              icon: const Icon(Icons.notifications_none, color: AppColors.primaryGreen),
+              icon: Icon(Icons.notifications_none, color: AppColors.primaryGreen),
             ),
             if (hasNotification)
               Positioned(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
 import '../services/auth_api.dart';
+import '../utils/validators.dart';
 import 'forgot_password_screen.dart';
 import 'signup_screen.dart';
 
@@ -34,6 +35,11 @@ class _LoginScreenState extends State<LoginScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter your email and password')),
       );
+      return;
+    }
+    final error = emailError(email);
+    if (error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
       return;
     }
 
@@ -148,7 +154,7 @@ class _LoginCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
+          Text(
             'FUTSAL FINDER',
             textAlign: TextAlign.center,
             style: TextStyle(
@@ -194,7 +200,7 @@ class _LoginCard extends StatelessWidget {
                 minimumSize: const Size(0, 0),
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              child: const Text(
+              child: Text(
                 'Forgot Password?',
                 style: TextStyle(
                   color: AppColors.primaryGreen,
@@ -225,12 +231,12 @@ class _LoginCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Text("Don't have an account? ", style: TextStyle(color: AppColors.textSecondary)),
+              Text("Don't have an account? ", style: TextStyle(color: AppColors.textSecondary)),
               GestureDetector(
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const SignUpScreen()),
                 ),
-                child: const Text(
+                child: Text(
                   'Sign Up',
                   style: TextStyle(
                     color: AppColors.primaryGreen,
@@ -270,7 +276,7 @@ class _AuthField extends StatelessWidget {
       height: 52,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
-        color: const Color(0xFFEFF3EF),
+        color: AppColors.subtleFill,
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
@@ -286,7 +292,7 @@ class _AuthField extends StatelessWidget {
                 isDense: true,
                 border: InputBorder.none,
                 hintText: hintText,
-                hintStyle: const TextStyle(color: AppColors.textSecondary),
+                hintStyle: TextStyle(color: AppColors.textSecondary),
               ),
             ),
           ),

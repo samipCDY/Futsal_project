@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
 import '../services/auth_api.dart';
+import '../utils/validators.dart';
 import 'new_password_screen.dart';
 import 'otp_verification_screen.dart';
 
@@ -26,10 +27,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   Future<void> _sendCode() async {
     final email = _emailController.text.trim();
-    if (email.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter your email')),
-      );
+    final error = emailError(email);
+    if (error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
       return;
     }
 
@@ -70,7 +70,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       appBar: AppBar(
         backgroundColor: AppColors.background,
         elevation: 0,
-        iconTheme: const IconThemeData(color: AppColors.primaryGreen),
+        iconTheme: IconThemeData(color: AppColors.primaryGreen),
       ),
       body: SafeArea(
         child: Padding(
@@ -79,15 +79,15 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: 12),
-              const Icon(Icons.lock_reset_outlined, size: 56, color: AppColors.primaryGreen),
+              Icon(Icons.lock_reset_outlined, size: 56, color: AppColors.primaryGreen),
               const SizedBox(height: 20),
-              const Text(
+              Text(
                 'Forgot your password?',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: AppColors.textPrimary),
               ),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 'Enter your account email and we\'ll send you a verification code.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
@@ -103,13 +103,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.mail_outline, color: AppColors.textSecondary, size: 20),
+                    Icon(Icons.mail_outline, color: AppColors.textSecondary, size: 20),
                     const SizedBox(width: 10),
                     Expanded(
                       child: TextField(
                         controller: _emailController,
                         keyboardType: TextInputType.emailAddress,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           isDense: true,
                           border: InputBorder.none,
                           hintText: 'Email',

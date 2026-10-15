@@ -1,14 +1,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="futsal_app"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-        android:usesCleartextTraffic="true">
-        <!-- usesCleartextTraffic: dev-only, so the app can call the local
-             Django server over plain http://localhost:8000. Remove/restrict
-             this once the backend is deployed behind HTTPS. -->
+        android:networkSecurityConfig="@xml/network_security_config">
+        <!-- network_security_config allows plain http only to the local Django
+             server during development; everything else must use https. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"

@@ -101,6 +101,13 @@ class BookingApiTests(ProfilesTableMixin, TestCase):
         self.assertFalse(slots['18:00'])
         self.assertTrue(slots['19:00'])
 
+    def test_played_bookings_show_as_completed(self):
+        Booking.objects.create(ground=self.ground, customer=self.customer,
+                               date=timezone.localdate() - timedelta(days=1),
+                               start_time=time(18), price=1400)
+        statuses = [b['status'] for b in self.client_for(self.customer).get('/api/bookings/').json()]
+        self.assertEqual(statuses, ['completed'])
+
     def test_slots_require_a_date(self):
         response = self.client_for(self.customer).get(f'/api/grounds/{self.ground.id}/slots/')
         self.assertEqual(response.status_code, 400)

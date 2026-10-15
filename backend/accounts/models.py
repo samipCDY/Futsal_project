@@ -64,10 +64,22 @@ class Profile(models.Model):
     is_authenticated = True
     is_anonymous = False
 
+    class Gender(models.TextChoices):
+        MALE = 'male', 'Male'
+        FEMALE = 'female', 'Female'
+        OTHER = 'other', 'Other'
+
     id = models.UUIDField(primary_key=True)
     email = models.TextField(blank=True)
-    full_name = models.TextField(blank=True)
+    first_name = models.TextField(blank=True)
+    last_name = models.TextField(blank=True)
+    full_name = models.TextField(blank=True, help_text='Kept as "first last" for screens that show one name.')
+    date_of_birth = models.DateField(null=True, blank=True)
+    gender = models.TextField(choices=Gender.choices, null=True, blank=True)
     mobile_number = models.TextField(blank=True)
+    address = models.TextField(blank=True)
+    city = models.TextField(blank=True)
+    avatar_url = models.TextField(blank=True, help_text='Public URL of the profile photo in the "avatars" bucket.')
     role = models.TextField(choices=Role.choices, default=Role.CUSTOMER)
     created_at = models.DateTimeField()
 
@@ -78,3 +90,29 @@ class Profile(models.Model):
 
     def __str__(self):
         return self.full_name or str(self.id)
+
+
+class Preferences(models.Model):
+    """Settings each user picks on the app's Profile page."""
+
+    class Theme(models.TextChoices):
+        SYSTEM = 'system', 'Same as phone'
+        LIGHT = 'light', 'Light'
+        DARK = 'dark', 'Dark'
+
+    class Language(models.TextChoices):
+        ENGLISH = 'en', 'English'
+        NEPALI = 'ne', 'नेपाली'
+
+    # See Ground.owner for why there's no database-level foreign key.
+    profile = models.OneToOneField(
+        Profile, on_delete=models.DO_NOTHING, db_constraint=False, primary_key=True, related_name='preferences')
+    theme = models.CharField(max_length=6, choices=Theme.choices, default=Theme.SYSTEM)
+    language = models.CharField(max_length=2, choices=Language.choices, default=Language.ENGLISH)
+    notifications_enabled = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name_plural = 'preferences'
+
+    def __str__(self):
+        return f'Preferences of {self.profile_id}'

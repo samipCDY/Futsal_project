@@ -1,14 +1,8 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/user_role.dart';
+import 'api_exception.dart';
 
-class ApiException implements Exception {
-  final String message;
-
-  ApiException(this.message);
-
-  @override
-  String toString() => message;
-}
+export 'api_exception.dart';
 
 /// Thin wrapper around Supabase Auth. Callers only ever see [ApiException]
 /// (translated from Supabase's [AuthException]) so existing `on ApiException

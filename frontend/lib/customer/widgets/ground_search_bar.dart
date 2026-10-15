@@ -28,7 +28,7 @@ class GroundSearchBar extends StatelessWidget {
             ),
             child: Row(
               children: [
-                const Icon(Icons.search, color: AppColors.textSecondary, size: 20),
+                Icon(Icons.search, color: AppColors.textSecondary, size: 20),
                 const SizedBox(width: 10),
                 Expanded(
                   child: TextField(
@@ -37,7 +37,7 @@ class GroundSearchBar extends StatelessWidget {
                       isDense: true,
                       border: InputBorder.none,
                       hintText: hintText,
-                      hintStyle: const TextStyle(color: AppColors.textSecondary),
+                      hintStyle: TextStyle(color: AppColors.textSecondary),
                     ),
                   ),
                 ),

@@ -16,6 +16,7 @@ class AuthProvider extends ChangeNotifier {
   int _generation = 0;
 
   UserRole? get currentRole => _currentRole;
+  String? get userId => _roleUserId;
   bool get isLoggedIn => _currentRole != null;
   bool get isLoading => _isLoading;
 

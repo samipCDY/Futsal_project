@@ -46,6 +46,13 @@ class BookingSerializer(serializers.ModelSerializer):
                 {'date': f'You can book up to {MAX_DAYS_AHEAD} days ahead.'})
         return attrs
 
+    def to_representation(self, booking):
+        data = super().to_representation(booking)
+        # Once a confirmed slot's hour is over, the game has been played.
+        if booking.status == Booking.Status.CONFIRMED and slot_has_started(booking.date, booking.end_time):
+            data['status'] = Booking.Status.COMPLETED
+        return data
+
     def create(self, validated_data):
         validated_data['customer'] = self.context['request'].user
         validated_data['price'] = validated_data['ground'].price_per_hour

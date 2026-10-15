@@ -5,8 +5,9 @@ import '../../core/models/booking_model.dart';
 
 class BookingCard extends StatelessWidget {
   final BookingModel booking;
+  final VoidCallback? onCancel;
 
-  const BookingCard({super.key, required this.booking});
+  const BookingCard({super.key, required this.booking, this.onCancel});
 
   @override
   Widget build(BuildContext context) {
@@ -30,7 +31,7 @@ class BookingCard extends StatelessWidget {
               if (!isCompleted)
                 _RefChip(bookingRef: booking.bookingRef)
               else
-                const Icon(Icons.check_circle, color: AppColors.textSecondary),
+                Icon(Icons.check_circle, color: AppColors.textSecondary),
             ],
           ),
           const SizedBox(height: 10),
@@ -48,9 +49,9 @@ class BookingCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          const Divider(height: 1, color: AppColors.divider),
+          Divider(height: 1, color: AppColors.divider),
           const SizedBox(height: 12),
-          _BookingBody(booking: booking),
+          _BookingBody(booking: booking, onCancel: onCancel),
         ],
       ),
     );
@@ -59,8 +60,40 @@ class BookingCard extends StatelessWidget {
 
 class _BookingBody extends StatelessWidget {
   final BookingModel booking;
+  final VoidCallback? onCancel;
 
-  const _BookingBody({required this.booking});
+  const _BookingBody({required this.booking, this.onCancel});
+
+  Widget _priceRow() {
+    if (booking.isPayAtGround) {
+      return Row(
+        children: [
+          Text('Rs ${booking.price.toStringAsFixed(0)}', style: AppTextStyles.price),
+          const SizedBox(width: 8),
+          Text('Pay at the ground', style: TextStyle(color: AppColors.textSecondary, fontStyle: FontStyle.italic)),
+        ],
+      );
+    }
+    return Row(
+      children: [
+        Text('Rs ${booking.price.toStringAsFixed(0)}', style: AppTextStyles.price),
+        const SizedBox(width: 8),
+        Text('Paid via', style: TextStyle(color: AppColors.textSecondary)),
+        const SizedBox(width: 6),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: AppColors.khaltiPurple,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Text(
+            booking.paymentLabel,
+            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+          ),
+        ),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -69,25 +102,7 @@ class _BookingBody extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Text('Rs ${booking.price.toStringAsFixed(0)}', style: AppTextStyles.price),
-                const SizedBox(width: 8),
-                const Text('Paid via', style: TextStyle(color: AppColors.textSecondary)),
-                const SizedBox(width: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: AppColors.khaltiPurple,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    booking.paymentMethod ?? '',
-                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ],
-            ),
+            _priceRow(),
             const SizedBox(height: 14),
             Row(
               children: [
@@ -110,7 +125,7 @@ class _BookingBody extends StatelessWidget {
                     onPressed: () {},
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.textPrimary,
-                      side: const BorderSide(color: AppColors.divider),
+                      side: BorderSide(color: AppColors.divider),
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     ),
@@ -120,7 +135,7 @@ class _BookingBody extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 10),
-            _WideActionButton(label: 'Refund', onTap: () {}),
+            _WideActionButton(label: 'Cancel Booking', onTap: onCancel),
           ],
         );
 
@@ -128,13 +143,7 @@ class _BookingBody extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Text('Rs ${booking.price.toStringAsFixed(0)}', style: AppTextStyles.price),
-                const SizedBox(width: 8),
-                const Text('Pay at venue', style: TextStyle(color: AppColors.textSecondary, fontStyle: FontStyle.italic)),
-              ],
-            ),
+            _priceRow(),
             const SizedBox(height: 14),
             Container(
               width: double.infinity,
@@ -143,10 +152,10 @@ class _BookingBody extends StatelessWidget {
                 color: AppColors.infoBannerBg,
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Row(
+              child: Row(
                 children: [
                   Icon(Icons.info_outline, size: 16, color: AppColors.infoBannerText),
-                  SizedBox(width: 8),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       'Waiting for arena confirmation...',
@@ -157,7 +166,7 @@ class _BookingBody extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 10),
-            _WideActionButton(label: 'Cancel Booking', onTap: () {}),
+            _WideActionButton(label: 'Cancel Booking', onTap: onCancel),
           ],
         );
 
@@ -166,8 +175,14 @@ class _BookingBody extends StatelessWidget {
           children: [
             Text('How was your game?', style: AppTextStyles.subheading),
             const SizedBox(height: 8),
-            _StarRating(initialRating: booking.rating ?? 0),
+            const _StarRating(initialRating: 0),
           ],
+        );
+
+      case BookingStatus.cancelled:
+        return Text(
+          'Cancelled · Rs ${booking.price.toStringAsFixed(0)}',
+          style: TextStyle(color: AppColors.textSecondary),
         );
     }
   }
@@ -175,7 +190,7 @@ class _BookingBody extends StatelessWidget {
 
 class _WideActionButton extends StatelessWidget {
   final String label;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   const _WideActionButton({required this.label, required this.onTap});
 
@@ -223,6 +238,12 @@ class _StatusBadge extends StatelessWidget {
           'COMPLETED',
           null,
         ),
+      BookingStatus.cancelled => (
+          AppColors.dangerBg,
+          AppColors.dangerText,
+          'CANCELLED',
+          null,
+        ),
     };
 
     return Container(
@@ -257,7 +278,7 @@ class _RefChip extends StatelessWidget {
       decoration: BoxDecoration(color: AppColors.refChipBg, borderRadius: BorderRadius.circular(8)),
       child: Text(
         bookingRef,
-        style: const TextStyle(color: AppColors.refChipText, fontSize: 11, fontWeight: FontWeight.w600),
+        style: TextStyle(color: AppColors.refChipText, fontSize: 11, fontWeight: FontWeight.w600),
       ),
     );
   }

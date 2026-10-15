@@ -5,15 +5,29 @@ import '../../core/models/ground_model.dart';
 
 class GroundCard extends StatelessWidget {
   final GroundModel ground;
+
+  /// Distance from the user, when their location is known.
+  final double? distanceKm;
   final VoidCallback? onBookNow;
   final VoidCallback? onTap;
+  final VoidCallback? onFavouriteTap;
 
   const GroundCard({
     super.key,
     required this.ground,
+    this.distanceKm,
     this.onBookNow,
     this.onTap,
+    this.onFavouriteTap,
   });
+
+  String get _locationLine {
+    final km = distanceKm;
+    if (km == null) return ground.area;
+    // Rough city travel time, ~20 km/h.
+    final minutes = (km * 3).ceil().clamp(1, 999);
+    return '${ground.area} · ${km.toStringAsFixed(1)} km · $minutes min away';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -30,33 +44,24 @@ class GroundCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _GroundImage(ground: ground),
+            _GroundImage(ground: ground, onFavouriteTap: onFavouriteTap),
             Padding(
               padding: const EdgeInsets.all(14),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          ground.name,
-                          style: AppTextStyles.subheading.copyWith(fontSize: 17),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      _RatingPill(rating: ground.rating, reviewCount: ground.reviewCount),
-                    ],
+                  Text(
+                    ground.name,
+                    style: AppTextStyles.subheading.copyWith(fontSize: 17),
                   ),
                   const SizedBox(height: 6),
                   Row(
                     children: [
-                      const Icon(Icons.location_on_outlined, size: 15, color: AppColors.textSecondary),
+                      Icon(Icons.location_on_outlined, size: 15, color: AppColors.textSecondary),
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
-                          '${ground.area} · ${ground.distanceKm} km · ${ground.minutesAway} min away',
+                          _locationLine,
                           style: AppTextStyles.caption,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -64,7 +69,7 @@ class GroundCard extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  const Divider(height: 1, color: AppColors.divider),
+                  Divider(height: 1, color: AppColors.divider),
                   const SizedBox(height: 12),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
@@ -112,8 +117,9 @@ class GroundCard extends StatelessWidget {
 
 class _GroundImage extends StatelessWidget {
   final GroundModel ground;
+  final VoidCallback? onFavouriteTap;
 
-  const _GroundImage({required this.ground});
+  const _GroundImage({required this.ground, this.onFavouriteTap});
 
   @override
   Widget build(BuildContext context) {
@@ -140,6 +146,20 @@ class _GroundImage extends StatelessWidget {
               top: 10,
               left: 10,
               child: _Badge(label: ground.badgeLabel!),
+            ),
+          if (onFavouriteTap != null)
+            Positioned(
+              top: 6,
+              right: 6,
+              child: IconButton(
+                onPressed: onFavouriteTap,
+                tooltip: ground.isFavourite ? 'Remove from favourites' : 'Save to favourites',
+                style: IconButton.styleFrom(backgroundColor: AppColors.surface),
+                icon: Icon(
+                  ground.isFavourite ? Icons.favorite : Icons.favorite_border,
+                  color: ground.isFavourite ? Colors.red : AppColors.textSecondary,
+                ),
+              ),
             ),
         ],
       ),
@@ -174,40 +194,6 @@ class _Badge extends StatelessWidget {
           Text(
             label,
             style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _RatingPill extends StatelessWidget {
-  final double rating;
-  final int reviewCount;
-
-  const _RatingPill({required this.rating, required this.reviewCount});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-      decoration: BoxDecoration(
-        color: AppColors.rating.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.star, size: 14, color: AppColors.rating),
-          const SizedBox(width: 3),
-          Text(
-            rating.toStringAsFixed(1),
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5, color: AppColors.textPrimary),
-          ),
-          const SizedBox(width: 3),
-          Text(
-            '($reviewCount)',
-            style: AppTextStyles.caption.copyWith(fontSize: 11),
           ),
         ],
       ),
