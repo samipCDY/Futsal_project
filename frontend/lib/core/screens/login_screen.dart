@@ -63,7 +63,10 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF1E1E1E),
+      // Dark brand backdrop; in dark mode one shade darker than the card so
+      // the card still stands out.
+      backgroundColor:
+          Theme.of(context).brightness == Brightness.dark ? AppColors.background : const Color(0xFF1E1E1E),
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -148,8 +151,9 @@ class _LoginCard extends StatelessWidget {
       margin: const EdgeInsets.symmetric(horizontal: 24),
       padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.divider),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
