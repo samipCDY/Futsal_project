@@ -69,6 +69,15 @@ class OwnerApi {
     eventsChanged.value++;
   }
 
+  /// Earnings per day/week/month/year ([period]), oldest bar first.
+  static Future<EarningsChart> fetchEarnings(String period, {String? groundId}) async {
+    final data = await ApiClient.get('/owner/earnings/', query: {
+      'period': period,
+      if (groundId != null) 'ground': groundId,
+    }) as Map<String, dynamic>;
+    return EarningsChart.fromJson(data);
+  }
+
   /// Bookings at the owner's grounds on [day], optionally at one ground only.
   static Future<List<BookingModel>> fetchBookings(DateTime day, {String? groundId}) async {
     final data = await ApiClient.get('/bookings/', query: {
@@ -112,5 +121,40 @@ class OwnerSummary {
         upcoming: (json['upcoming'] as List)
             .map((booking) => BookingModel.fromJson(booking as Map<String, dynamic>))
             .toList(),
+      );
+}
+
+/// The owner's earnings over time, for the Dashboard chart.
+class EarningsChart {
+  final String period; // day, week, month or year
+  final List<EarningsBar> bars;
+  final double total;
+  final double previousTotal; // the same number of periods just before
+
+  const EarningsChart({required this.period, required this.bars, required this.total, required this.previousTotal});
+
+  factory EarningsChart.fromJson(Map<String, dynamic> json) => EarningsChart(
+        period: json['period'] as String,
+        bars: [for (final bar in json['bars'] as List) EarningsBar.fromJson(bar as Map<String, dynamic>)],
+        total: double.parse(json['total'] as String),
+        previousTotal: double.parse(json['previous_total'] as String),
+      );
+
+  /// Change against the previous periods in percent, or null if there was
+  /// nothing to compare with.
+  double? get changePercent => previousTotal == 0 ? null : (total - previousTotal) / previousTotal * 100;
+}
+
+class EarningsBar {
+  final DateTime start;
+  final double earnings;
+  final int games;
+
+  const EarningsBar({required this.start, required this.earnings, required this.games});
+
+  factory EarningsBar.fromJson(Map<String, dynamic> json) => EarningsBar(
+        start: DateTime.parse(json['start'] as String),
+        earnings: double.parse(json['earnings'] as String),
+        games: json['games'] as int,
       );
 }

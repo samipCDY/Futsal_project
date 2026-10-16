@@ -58,6 +58,9 @@ class AppColors {
   /// Soft fill behind text fields and footers.
   static Color get subtleFill => _palette.subtleFill;
   static Color get mapPreviewBg => _palette.mapPreviewBg;
+
+  /// Bars in charts: checked for colour and contrast on each mode's surface.
+  static Color get chartBar => _palette.chartBar;
 }
 
 class AppPalette {
@@ -89,6 +92,7 @@ class AppPalette {
   final Color completedCardBg;
   final Color subtleFill;
   final Color mapPreviewBg;
+  final Color chartBar;
 
   const AppPalette({
     required this.primaryGreen,
@@ -119,6 +123,7 @@ class AppPalette {
     required this.completedCardBg,
     required this.subtleFill,
     required this.mapPreviewBg,
+    required this.chartBar,
   });
 
   static const light = AppPalette(
@@ -150,6 +155,7 @@ class AppPalette {
     completedCardBg: Color(0xFFE9F0FD),
     subtleFill: Color(0xFFEFF3EF),
     mapPreviewBg: Color(0xFFDCE6DD),
+    chartBar: Color(0xFF23804F),
   );
 
   /// Near-black backgrounds with light text. The green is brightened so it
@@ -183,5 +189,6 @@ class AppPalette {
     completedCardBg: Color(0xFF1A2233),
     subtleFill: Color(0xFF2A2A2A),
     mapPreviewBg: Color(0xFF1F2A22),
+    chartBar: Color(0xFF2A8F59),
   );
 }

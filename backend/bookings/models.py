@@ -137,7 +137,10 @@ class Booking(models.Model):
     @property
     def owner_keeps(self):
         """What the owner earns from this booking. A cancelled booking earns
-        only the part of an online payment that wasn't refunded."""
+        only the part of an online payment that wasn't refunded, and an
+        online booking still waiting for payment earns nothing yet."""
+        if self.status == self.Status.PENDING and self.is_online and not self.is_paid:
+            return Decimal(0)
         if self.status != self.Status.CANCELLED:
             return self.price
         if not self.is_paid or self.refund_amount is None:

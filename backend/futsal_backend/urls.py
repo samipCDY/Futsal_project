@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from bookings.views import AdminRefundViewSet, BookingViewSet, owner_summary, payment_methods
+from bookings.views import AdminRefundViewSet, BookingViewSet, owner_earnings, owner_summary, payment_methods
 from grounds.views import (AdminGroundViewSet, EventViewSet, GroundViewSet, OwnerEventViewSet, OwnerGroundViewSet,
                            OwnerMaintenanceViewSet, admin_summary)
 from notifications.views import admin_announcement, mark_all_read, notification_list, owner_announcement
@@ -21,6 +21,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/accounts/', include('accounts.urls')),
     path('api/owner/summary/', owner_summary, name='owner-summary'),
+    path('api/owner/earnings/', owner_earnings, name='owner-earnings'),
     path('api/admin/summary/', admin_summary, name='admin-summary'),
     path('api/notifications/', notification_list, name='notifications'),
     path('api/payments/methods/', payment_methods, name='payment-methods'),

@@ -1,6 +1,6 @@
 from datetime import timedelta
+from decimal import Decimal
 
-from django.db.models import Sum
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from rest_framework import mixins, status, viewsets
@@ -131,9 +131,9 @@ def owner_summary(request):
     mine = Booking.objects.filter(ground__owner=owner)
     live = mine.exclude(status=Booking.Status.CANCELLED)
     this_week = live.filter(date__range=(week_start, week_end))
-    # Late cancellations still earn the owner the part that isn't refunded.
-    kept = sum(b.owner_keeps for b in mine.filter(status=Booking.Status.CANCELLED,
-                                                   date__range=(week_start, week_end)))
+    # Counts only money actually earned: unpaid online holds earn nothing,
+    # late online cancellations earn the part that wasn't refunded.
+    week_earnings = sum((b.owner_keeps for b in mine.filter(date__range=(week_start, week_end))), Decimal(0))
 
     upcoming = []
     for booking in live.filter(date__gte=today).select_related('ground', 'customer').order_by('date', 'start_time'):
@@ -146,7 +146,7 @@ def owner_summary(request):
     return Response({
         'today_bookings': live.filter(date=today).count(),
         'week_bookings': this_week.count(),
-        'week_earnings': f"{(this_week.aggregate(total=Sum('price'))['total'] or 0) + kept:.2f}",
+        'week_earnings': f'{week_earnings:.2f}',
         'week_start': week_start.isoformat(),
         'active_grounds': grounds.visible().count(),
         'total_grounds': grounds.count(),
@@ -189,3 +189,78 @@ class AdminRefundViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
             raise NotFound('No refund waiting for this booking.')
         booking.mark_refunded()
         return Response(self.get_serializer(booking).data)
+
+
+# How many bars each view shows, ending with the current day/week/month/year.
+EARNINGS_BARS = {'day': 14, 'week': 12, 'month': 12, 'year': 5}
+
+
+def _period_start(day, period):
+    """The first day of the day/week/month/year that `day` falls in. Weeks
+    run Sunday to Saturday, like the Dashboard's "this week"."""
+    if period == 'week':
+        return day - timedelta(days=(day.weekday() + 1) % 7)
+    if period == 'month':
+        return day.replace(day=1)
+    if period == 'year':
+        return day.replace(month=1, day=1)
+    return day
+
+
+def _step_back(start, period, steps):
+    if period == 'day':
+        return start - timedelta(days=steps)
+    if period == 'week':
+        return start - timedelta(weeks=steps)
+    if period == 'month':
+        months = start.year * 12 + start.month - 1 - steps
+        return start.replace(year=months // 12, month=months % 12 + 1)
+    return start.replace(year=start.year - steps)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsGroundOwner])
+def owner_earnings(request):
+    """Earnings per day, week, month or year (`?period=`), oldest first,
+    for the Dashboard chart. Counts games up to today, by the day they're
+    played: the full price, or what was kept from a late online
+    cancellation. `?ground=<id>` for one ground only. Also returns the total
+    of the bars and of the same number of bars just before them."""
+    period = request.query_params.get('period', 'day')
+    if period not in EARNINGS_BARS:
+        raise ValidationError({'period': 'Use day, week, month or year.'})
+    bars = EARNINGS_BARS[period]
+    today = timezone.localdate()
+    current = _period_start(today, period)
+    starts = [_step_back(current, period, steps) for steps in range(bars - 1, -1, -1)]
+    previous_from = _step_back(starts[0], period, bars)
+
+    bookings = Booking.objects.filter(ground__owner=request.user, date__gte=previous_from, date__lte=today)
+    ground = request.query_params.get('ground', '')
+    if ground.isdigit():
+        bookings = bookings.filter(ground_id=ground)
+
+    earned = {start: Decimal(0) for start in starts}
+    games = {start: 0 for start in starts}
+    previous_total = Decimal(0)
+    for booking in bookings.only('date', 'price', 'status', 'refund_amount', 'payment_status', 'payment_method',
+                                 'start_time'):
+        if booking.status != Booking.Status.CANCELLED and booking.date == today and \
+                not slot_has_started(booking.date, booking.end_time):
+            continue  # later today: not played (or earned) yet
+        start = _period_start(booking.date, period)
+        if start in earned:
+            earned[start] += booking.owner_keeps
+            if booking.status != Booking.Status.CANCELLED and booking.owner_keeps:
+                games[start] += 1
+        else:
+            previous_total += booking.owner_keeps
+
+    total = sum(earned.values(), Decimal(0))
+    return Response({
+        'period': period,
+        'bars': [{'start': start.isoformat(), 'earnings': f'{earned[start]:.2f}', 'games': games[start]}
+                 for start in starts],
+        'total': f'{total:.2f}',
+        'previous_total': f'{previous_total:.2f}',
+    })

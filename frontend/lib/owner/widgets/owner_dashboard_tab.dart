@@ -11,6 +11,7 @@ import '../../core/utils/money.dart';
 import '../../core/widgets/notification_bell.dart';
 import '../../core/widgets/profile_avatar.dart';
 import '../screens/ground_form_screen.dart';
+import 'earnings_chart_card.dart';
 import 'owner_booking_tile.dart';
 
 /// The owner's at-a-glance page: today's and this week's numbers, and the
@@ -133,6 +134,10 @@ class _OwnerDashboardTabState extends State<OwnerDashboardTab> {
                       value: '${summary.activeGrounds} of ${summary.totalGrounds}'),
                 ],
               ),
+              if (summary.totalGrounds > 0) ...[
+                const SizedBox(height: 16),
+                const EarningsChartCard(),
+              ],
               const SizedBox(height: 12),
               if (summary.totalGrounds > 0)
                 OutlinedButton.icon(
