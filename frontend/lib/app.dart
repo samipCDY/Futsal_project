@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'core/constants/app_colors.dart';
 import 'core/providers/profile_provider.dart';
 import 'core/routes/app_router.dart';
+import 'core/screens/splash_screen.dart';
 import 'core/widgets/palette_scope.dart';
 
 class FutsalApp extends StatelessWidget {
@@ -33,7 +34,7 @@ class FutsalApp extends StatelessWidget {
       theme: _theme(AppPalette.light, Brightness.light),
       darkTheme: _theme(AppPalette.dark, Brightness.dark),
       builder: (context, child) => PaletteScope(child: child!),
-      home: const AppRouter(),
+      home: const SplashGate(child: AppRouter()),
     );
   }
 }

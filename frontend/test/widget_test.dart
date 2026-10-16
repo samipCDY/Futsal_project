@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:futsal_app/app.dart';
 import 'package:futsal_app/core/providers/auth_provider.dart';
 import 'package:futsal_app/core/providers/profile_provider.dart';
+import 'package:futsal_app/core/screens/splash_screen.dart';
 
 void main() {
   setUpAll(() async {
@@ -19,7 +20,7 @@ void main() {
     );
   });
 
-  testWidgets('shows the login screen when signed out', (WidgetTester tester) async {
+  testWidgets('shows the splash, then the login screen when signed out', (WidgetTester tester) async {
     await tester.pumpWidget(
       MultiProvider(
         providers: [
@@ -32,8 +33,12 @@ void main() {
         child: const FutsalApp(),
       ),
     );
+    expect(find.byType(SplashScreen), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 3)); // splash time
     await tester.pumpAndSettle();
 
+    expect(find.byType(SplashScreen), findsNothing);
     expect(find.text('FUTSAL FINDER'), findsOneWidget);
     expect(find.text('Login'), findsOneWidget);
   });

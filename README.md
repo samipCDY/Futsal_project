@@ -1,4 +1,10 @@
-# Futsal Finder
+<p align="center">
+  <img src="frontend/assets/images/logo.png" alt="Futsal Finder logo" width="140">
+</p>
+
+<h1 align="center">Futsal Finder</h1>
+
+<p align="center"><b>Find · Book · Play</b></p>
 
 Find and book futsal grounds in Nepal. One Flutter app serves three kinds of
 users: **customers**, **ground owners** and an **admin**. A Django API sits
@@ -47,6 +53,14 @@ storage.
 - Send notices to customers, owners or everyone.
 - Track refunds owed for online payments and mark them as sent.
 
+## Look
+
+The app opens with a splash screen, and the logo is its launcher icon.
+
+<p align="center">
+  <img src="frontend/assets/images/splash.jpg" alt="Futsal Finder splash screen" width="240">
+</p>
+
 ## Support
 
 Phone **9744340506** · Email **csamip53@gmail.com** (also on the app's
@@ -89,6 +103,8 @@ frontend/           Flutter app
   lib/customer/     customer screens
   lib/owner/        ground owner screens
   lib/admin/        admin screens
+  assets/images/    logo and splash picture
+  assets/icon/      app icon and launch screen sources
 supabase/
   migrations/       SQL for profiles, storage buckets and their policies
 ```
@@ -198,6 +214,20 @@ flutter test
 ```
 
 Backend tests use SQLite, so they don't touch the Supabase database.
+
+## App icon and splash
+
+The icon and the launch screen are made from the images in
+`frontend/assets/icon/`. After changing them, run:
+
+```powershell
+cd frontend
+dart run flutter_launcher_icons
+dart run flutter_native_splash:create
+```
+
+The full splash picture (`assets/images/splash.jpg`) shows for 2 seconds
+when the app opens.
 
 ## Still to do
 

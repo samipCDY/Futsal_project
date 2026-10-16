@@ -110,15 +110,15 @@ class _LogoBadge extends StatelessWidget {
       height: 84,
       alignment: Alignment.center,
       decoration: const BoxDecoration(
-        color: Color(0xFF4ADE80),
+        color: Colors.white,
         shape: BoxShape.circle,
       ),
       child: ClipOval(
         child: Image.asset(
           'assets/images/logo.png',
-          width: 56,
-          height: 56,
-          fit: BoxFit.cover,
+          width: 62,
+          height: 62,
+          fit: BoxFit.contain,
           errorBuilder: (context, error, stackTrace) =>
               const Icon(Icons.sports_soccer, color: Color(0xFF1E1E1E), size: 44),
         ),
