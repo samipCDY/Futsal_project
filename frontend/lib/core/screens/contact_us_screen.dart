@@ -20,11 +20,13 @@ class ContactUsScreen extends StatelessWidget {
         children: [
           Text("We're here to help with bookings, payments, or anything else.", style: AppTextStyles.body),
           const SizedBox(height: 16),
-          Container(
-            decoration: BoxDecoration(
-              color: AppColors.surface,
+          // A Material card so the rows' tap ripple stays inside the rounded corners.
+          Material(
+            color: AppColors.surface,
+            clipBehavior: Clip.antiAlias,
+            shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.divider),
+              side: BorderSide(color: AppColors.divider),
             ),
             child: Column(
               children: [
