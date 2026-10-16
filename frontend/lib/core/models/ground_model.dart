@@ -33,6 +33,9 @@ class GroundModel {
   final String reviewNote;
   final String ownershipDocument; // path in the private ground-documents bucket
 
+  /// Current and coming closures, soonest first.
+  final List<MaintenancePeriod> maintenance;
+
   const GroundModel({
     required this.id,
     required this.name,
@@ -52,6 +55,7 @@ class GroundModel {
     this.status = GroundStatus.approved,
     this.reviewNote = '',
     this.ownershipDocument = '',
+    this.maintenance = const [],
   });
 
   /// From the Django API. Decimals arrive as strings (e.g. "1400.00").
@@ -76,6 +80,10 @@ class GroundModel {
       status: GroundStatus.values.asNameMap()[json['status']] ?? GroundStatus.approved,
       reviewNote: json['review_note'] as String? ?? '',
       ownershipDocument: json['ownership_document'] as String? ?? '',
+      maintenance: [
+        for (final period in json['maintenance'] as List? ?? [])
+          MaintenancePeriod.fromJson(period as Map<String, dynamic>),
+      ],
     );
   }
 
@@ -98,6 +106,7 @@ class GroundModel {
         status: status,
         reviewNote: reviewNote,
         ownershipDocument: ownershipDocument,
+        maintenance: maintenance,
       );
 
   LatLng get location => LatLng(latitude, longitude);
@@ -113,6 +122,33 @@ class GroundModel {
 
   /// Customers see it only when it's approved and not hidden.
   bool get isLive => isActive && status == GroundStatus.approved;
+}
+
+/// Days a ground is closed, e.g. to replace the turf.
+class MaintenancePeriod {
+  final String id;
+  final DateTime startsOn;
+  final DateTime endsOn; // last closed day
+  final String reason;
+
+  const MaintenancePeriod({required this.id, required this.startsOn, required this.endsOn, required this.reason});
+
+  factory MaintenancePeriod.fromJson(Map<String, dynamic> json) => MaintenancePeriod(
+        id: json['id'].toString(),
+        startsOn: DateTime.parse(json['starts_on'] as String),
+        endsOn: DateTime.parse(json['ends_on'] as String),
+        reason: json['reason'] as String,
+      );
+
+  bool get isOneDay => startsOn == endsOn;
+}
+
+/// One day's slots at a ground, or why it's closed that day.
+class DaySlots {
+  final List<SlotModel> slots;
+  final String? closedReason;
+
+  const DaySlots({required this.slots, this.closedReason});
 }
 
 /// One bookable hour at a ground on a given day.

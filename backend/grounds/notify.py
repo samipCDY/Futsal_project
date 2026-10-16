@@ -1,11 +1,13 @@
-"""Emails about ground approval. Sent after the database change is saved,
-and a failed email never undoes or blocks the change."""
+"""Emails and in-app notices about grounds and their events. Emails are sent after
+the database change is saved, and a failed email never blocks the change."""
 
 from django.conf import settings
 from django.core.mail import send_mail
 from django.db import transaction
+from django.utils import timezone
 
-from accounts.models import User
+from accounts.models import Profile, Role, User
+from notifications.models import Notification, notify, notify_many
 
 
 def _send_later(subject, message, recipients):
@@ -42,3 +44,15 @@ def ground_reviewed(ground):
         body = (f'"{ground.name}" was not approved.\n\nReason: {ground.review_note}\n\n'
                 f'Please fix this in the app (My Grounds → Edit) and save. It will be checked again.\n')
     _send_later(subject, body, [ground.owner.email])
+    notify(ground.owner_id, Notification.Kind.GROUND, subject,
+           body.strip() if ground.status == ground.Status.APPROVED else f'Reason: {ground.review_note}. '
+           'Fix it in My Grounds → Edit and save to send it again.')
+
+
+def event_published(event):
+    """Every customer hears about a newly published event."""
+    when = timezone.localtime(event.starts_at)
+    hour = when.strftime('%I:%M %p').lstrip('0')
+    notify_many(Profile.objects.filter(role=Role.CUSTOMER).values_list('id', flat=True), Notification.Kind.EVENT,
+                f'New event at {event.ground.name}',
+                f'{event.title} · {when:%a} {when.day} {when:%b}, {hour}. See it in Bookings → Events.')

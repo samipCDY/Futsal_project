@@ -1,8 +1,9 @@
 import 'package:flutter/foundation.dart';
+import '../models/booking_model.dart';
 import '../models/ground_model.dart';
 import 'api_client.dart';
 
-/// The admin's side of the Django API: approving new grounds.
+/// The admin's side of the Django API: approving grounds and sending refunds.
 class AdminApi {
   /// Bumped after a ground is approved or rejected, so lists reload.
   static final groundsChanged = ValueNotifier<int>(0);
@@ -28,6 +29,18 @@ class AdminApi {
   /// One ground, with a link to its lalpurja photo.
   static Future<AdminGround> fetchGround(String id) async =>
       AdminGround.fromJson(await ApiClient.get('/admin/grounds/$id/') as Map<String, dynamic>);
+
+  /// Refunds of online payments to send back through eSewa/Khalti
+  /// ([sent] = already sent).
+  static Future<List<BookingModel>> fetchRefunds({bool sent = false}) async {
+    final data = await ApiClient.get('/admin/refunds/', query: {'status': sent ? 'done' : 'pending'}) as List;
+    return data.map((json) => BookingModel.fromJson(json as Map<String, dynamic>)).toList();
+  }
+
+  /// After sending the money back in the eSewa/Khalti merchant portal.
+  static Future<void> markRefunded(String bookingId) async {
+    await ApiClient.post('/admin/refunds/$bookingId/done/');
+  }
 
   static Future<AdminGround> approve(String id) => _review(id, 'approve');
 

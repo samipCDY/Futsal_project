@@ -98,28 +98,21 @@ class _OwnerBookingsTabState extends State<OwnerBookingsTab> {
   }
 
   Future<void> _cancel(BookingModel booking) async {
-    final confirmed = await showDialog<bool>(
+    final reason = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Cancel this booking?'),
-        content: Text(
-          '${booking.customerName ?? 'The customer'} · ${booking.timeLabel}\n\n'
-          'Please let them know — call ${booking.customerPhone ?? 'them'} before cancelling.',
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Keep it')),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: AppColors.dangerText),
-            child: const Text('Cancel booking'),
-          ),
-        ],
-      ),
+      builder: (_) => _OwnerCancelDialog(booking: booking),
     );
-    if (confirmed != true || !mounted) return;
+    if (reason == null || !mounted) return;
     try {
-      await FutsalApi.cancelBooking(booking.id); // the listener reloads the list
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Booking cancelled.')));
+      await FutsalApi.cancelBooking(booking.id, reason: reason); // the listener reloads the list
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(booking.isPaid
+              ? 'Booking cancelled. ${booking.customerName ?? 'The customer'} gets a full refund '
+                  'of ${formatRupees(booking.price)}.'
+              : 'Booking cancelled. ${booking.customerName ?? 'The customer'} was told.'),
+        ));
+      }
     } on ApiException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
     }
@@ -129,7 +122,8 @@ class _OwnerBookingsTabState extends State<OwnerBookingsTab> {
   Widget build(BuildContext context) {
     final bookings = _bookings;
     final live = (bookings ?? []).where((b) => b.status != BookingStatus.cancelled).toList();
-    final total = live.fold<double>(0, (sum, b) => sum + b.price);
+    // Late cancellations still earn the part that wasn't refunded.
+    final total = (bookings ?? []).fold<double>(0, (sum, b) => sum + b.ownerKeeps);
 
     return SafeArea(
       bottom: false,
@@ -220,6 +214,66 @@ class _OwnerBookingsTabState extends State<OwnerBookingsTab> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Confirms an owner's cancellation and asks why; the customer sees the
+/// reason, and gets a full refund if they paid online. Returns the reason, or null.
+class _OwnerCancelDialog extends StatefulWidget {
+  final BookingModel booking;
+
+  const _OwnerCancelDialog({required this.booking});
+
+  @override
+  State<_OwnerCancelDialog> createState() => _OwnerCancelDialogState();
+}
+
+class _OwnerCancelDialogState extends State<_OwnerCancelDialog> {
+  final _reason = TextEditingController();
+
+  @override
+  void dispose() {
+    _reason.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final booking = widget.booking;
+    return AlertDialog(
+      title: const Text('Cancel this booking?'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('${booking.customerName ?? 'The customer'} · ${booking.timeLabel}\n\n'
+                '${booking.isPaid ? 'They paid with ${booking.paymentLabel}, so they get a full refund of '
+                    '${formatRupees(booking.price)}.' : 'They pay in cash, so there is nothing to refund.'} '
+                'Please call ${booking.customerPhone ?? 'them'} too.'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _reason,
+              maxLength: 200,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: const InputDecoration(
+                labelText: 'Reason (customer sees this)',
+                hintText: 'e.g. Turf is wet after rain',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Keep it')),
+        TextButton(
+          onPressed: () => Navigator.pop(context, _reason.text.trim()),
+          style: TextButton.styleFrom(foregroundColor: AppColors.dangerText),
+          child: const Text('Cancel booking'),
+        ),
+      ],
     );
   }
 }

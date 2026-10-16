@@ -95,6 +95,10 @@ class Ground(models.Model):
         self.save(update_fields=['status', 'review_note', 'reviewed_at'])
         notify.ground_reviewed(self)
 
+    def closure_on(self, day):
+        """The maintenance closing the ground on `day`, or None."""
+        return self.maintenance_periods.filter(starts_on__lte=day, ends_on__gte=day).first()
+
     def price_at(self, start):
         """The hourly rate for a slot starting at `start`."""
         if start < DAY_STARTS:
@@ -117,3 +121,54 @@ class Favourite(models.Model):
 
     def __str__(self):
         return f'{self.customer} ♥ {self.ground}'
+
+
+class Maintenance(models.Model):
+    """Days a ground is closed, e.g. for turf repair. Customers see the reason,
+    and bookings on those days are cancelled with a full refund."""
+
+    ground = models.ForeignKey(Ground, on_delete=models.CASCADE, related_name='maintenance_periods')
+    starts_on = models.DateField()
+    ends_on = models.DateField(help_text='Last closed day (inclusive).')
+    reason = models.CharField(max_length=255, help_text='Shown to customers, e.g. "Replacing the turf".')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['starts_on']
+        verbose_name_plural = 'maintenance'
+
+    def __str__(self):
+        return f'{self.ground} closed {self.starts_on} – {self.ends_on}'
+
+
+class Event(models.Model):
+    """A tournament or other event an owner posts for one of their grounds.
+    Drafts are only seen by the owner; published ones by everyone, marked
+    expired once they're over."""
+
+    # See Ground.owner for why there's no database-level foreign key.
+    owner = models.ForeignKey(Profile, on_delete=models.DO_NOTHING, db_constraint=False, related_name='events')
+    ground = models.ForeignKey(Ground, on_delete=models.CASCADE, related_name='events')
+    title = models.CharField(max_length=120)
+    description = models.TextField(blank=True)
+    starts_at = models.DateTimeField()
+    ends_at = models.DateTimeField(null=True, blank=True, help_text='Leave empty for a one-off time.')
+    image_url = models.URLField(blank=True)
+    is_published = models.BooleanField(default=False)
+    published_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['starts_at']
+
+    def __str__(self):
+        return self.title
+
+    @property
+    def expires_at(self):
+        return self.ends_at or self.starts_at
+
+    @property
+    def is_expired(self):
+        return self.expires_at <= timezone.now()

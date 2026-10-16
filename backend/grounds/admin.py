@@ -3,7 +3,7 @@ from django.utils import timezone
 from django.utils.html import format_html
 
 from . import notify
-from .models import Favourite, Ground
+from .models import Event, Favourite, Ground, Maintenance
 from .storage import signed_document_url
 
 
@@ -84,3 +84,18 @@ class GroundAdmin(admin.ModelAdmin):
 class FavouriteAdmin(admin.ModelAdmin):
     list_display = ('customer', 'ground', 'created_at')
     raw_id_fields = ('customer', 'ground')
+
+
+@admin.register(Maintenance)
+class MaintenanceAdmin(admin.ModelAdmin):
+    list_display = ('ground', 'starts_on', 'ends_on', 'reason')
+    list_filter = ('starts_on',)
+    raw_id_fields = ('ground',)
+
+
+@admin.register(Event)
+class EventAdmin(admin.ModelAdmin):
+    list_display = ('title', 'ground', 'starts_at', 'is_published')
+    list_filter = ('is_published',)
+    search_fields = ('title', 'ground__name')
+    raw_id_fields = ('owner', 'ground')

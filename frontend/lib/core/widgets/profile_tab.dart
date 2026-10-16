@@ -11,6 +11,7 @@ import 'logout_confirmation.dart';
 import 'profile_avatar.dart';
 import '../screens/contact_us_screen.dart';
 import '../screens/edit_profile_screen.dart';
+import '../screens/rules_screen.dart';
 
 const _languageNames = {'en': 'English', 'ne': 'नेपाली'};
 const _themeNames = {'system': 'System', 'light': 'Light', 'dark': 'Dark'};
@@ -156,6 +157,12 @@ class ProfileTab extends StatelessWidget {
                     onChanged: (enabled) =>
                         _savePreference(context, (p) => p.copyWith(notificationsEnabled: enabled)),
                   ),
+                ),
+                const _TileDivider(),
+                _ProfileTile(
+                  icon: Icons.gavel_outlined,
+                  label: 'Rules & regulations',
+                  onTap: () => _push(context, const RulesScreen()),
                 ),
                 const _TileDivider(),
                 _ProfileTile(

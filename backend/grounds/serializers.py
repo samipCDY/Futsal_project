@@ -1,25 +1,63 @@
 import re
+from datetime import timedelta
 
 from django.conf import settings
+from django.utils import timezone
 from rest_framework import serializers
 
 from . import notify
-from .models import Ground
+from .models import Event, Ground, Maintenance
 from .storage import signed_document_url
 
 # An admin checks these again when the owner changes them.
 REVIEWED_FIELDS = ('name', 'area', 'address', 'latitude', 'longitude', 'ownership_document')
 
 
+class MaintenanceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Maintenance
+        fields = ['id', 'starts_on', 'ends_on', 'reason']
+
+    def validate_reason(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('Tell customers why, e.g. "Replacing the turf".')
+        return value
+
+    def validate(self, attrs):
+        today = timezone.localdate()
+        if attrs['starts_on'] < today:
+            raise serializers.ValidationError({'starts_on': "Maintenance can't start in the past."})
+        if attrs['ends_on'] < attrs['starts_on']:
+            raise serializers.ValidationError({'ends_on': 'The last day must be on or after the first day.'})
+        if attrs['ends_on'] > today + timedelta(days=365):
+            raise serializers.ValidationError({'ends_on': 'Please pick dates within the next year.'})
+        return attrs
+
+
+class _UpcomingMaintenance(serializers.Field):
+    """The ground's current and future closures."""
+
+    def __init__(self, **kwargs):
+        super().__init__(source='*', read_only=True, **kwargs)
+
+    def to_representation(self, ground):
+        today = timezone.localdate()
+        periods = [m for m in ground.maintenance_periods.all() if m.ends_on >= today]
+        return MaintenanceSerializer(periods, many=True).data
+
+
 class GroundSerializer(serializers.ModelSerializer):
     # Filled in by GroundViewSet.get_queryset for the signed-in user.
     is_favourite = serializers.BooleanField(read_only=True, default=False)
+    maintenance = _UpcomingMaintenance()
 
     class Meta:
         model = Ground
         fields = [
             'id', 'name', 'area', 'address', 'latitude', 'longitude', 'morning_price', 'day_price',
             'evening_price', 'image_url', 'badge_label', 'opens_at', 'closes_at', 'is_favourite',
+            'maintenance',
         ]
 
 
@@ -27,12 +65,14 @@ class OwnerGroundSerializer(serializers.ModelSerializer):
     """A ground as its owner manages it. The owner is always the signed-in
     user, and only an admin can approve it."""
 
+    maintenance = _UpcomingMaintenance()
+
     class Meta:
         model = Ground
         fields = [
             'id', 'name', 'area', 'address', 'latitude', 'longitude', 'morning_price', 'day_price',
             'evening_price', 'image_url', 'badge_label', 'opens_at', 'closes_at', 'is_active',
-            'ownership_document', 'status', 'review_note', 'created_at',
+            'ownership_document', 'status', 'review_note', 'created_at', 'maintenance',
         ]
         read_only_fields = ['id', 'status', 'review_note', 'created_at']
 
@@ -148,3 +188,76 @@ class AdminGroundSerializer(serializers.ModelSerializer):
         if not self.context.get('with_document'):
             return None
         return signed_document_url(ground.ownership_document)
+
+
+class EventSerializer(serializers.ModelSerializer):
+    """An event as everyone sees it, plus whether it's the viewer's own."""
+
+    ground_name = serializers.CharField(source='ground.name', read_only=True)
+    ground_area = serializers.CharField(source='ground.area', read_only=True)
+    is_expired = serializers.BooleanField(read_only=True)
+    is_mine = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Event
+        fields = [
+            'id', 'ground', 'ground_name', 'ground_area', 'title', 'description', 'starts_at', 'ends_at',
+            'image_url', 'is_published', 'is_expired', 'is_mine', 'created_at',
+        ]
+        read_only_fields = fields
+
+    def get_is_mine(self, event):
+        return event.owner_id == self.context['request'].user.pk
+
+
+class OwnerEventSerializer(EventSerializer):
+    """An owner's own event: they can write everything except who owns it."""
+
+    class Meta(EventSerializer.Meta):
+        read_only_fields = ['id', 'ground_name', 'ground_area', 'is_expired', 'is_mine', 'created_at']
+
+    def validate_ground(self, ground):
+        if ground.owner_id != self.context['request'].user.pk:
+            raise serializers.ValidationError('Pick one of your own grounds.')
+        return ground
+
+    def validate_title(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Please enter the event's name.")
+        return value
+
+    def validate_description(self, value):
+        value = value.strip()
+        if len(value) > 2000:
+            raise serializers.ValidationError('Please keep the description under 2000 characters.')
+        return value
+
+    def validate_image_url(self, value):
+        """Only a poster the owner uploaded to their own folder (or "")."""
+        if not value:
+            return ''
+        owner_id = self.context['request'].user.pk
+        own_folder = f'{settings.SUPABASE_URL}/storage/v1/object/public/ground-photos/{owner_id}/'
+        if not value.startswith(own_folder) or '..' in value:
+            raise serializers.ValidationError('Please upload the poster from the app.')
+        return value
+
+    def validate(self, attrs):
+        starts_at = attrs.get('starts_at', getattr(self.instance, 'starts_at', None))
+        ends_at = attrs.get('ends_at', getattr(self.instance, 'ends_at', None))
+        if 'starts_at' in attrs and starts_at <= timezone.now():
+            raise serializers.ValidationError({'starts_at': 'Pick a date and time in the future.'})
+        if ends_at and starts_at and ends_at <= starts_at:
+            raise serializers.ValidationError({'ends_at': 'The end must be after the start.'})
+        return attrs
+
+    def save(self, **kwargs):
+        first_publish = bool(self.validated_data.get('is_published')) and not (
+            self.instance and self.instance.published_at)
+        if first_publish:
+            kwargs['published_at'] = timezone.now()
+        event = super().save(**kwargs)
+        if first_publish:
+            notify.event_published(event)
+        return event

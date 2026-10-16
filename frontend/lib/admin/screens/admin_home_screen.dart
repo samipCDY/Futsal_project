@@ -10,10 +10,12 @@ import '../../core/services/api_exception.dart';
 import '../../core/utils/time_format.dart';
 import '../../core/widgets/app_bottom_nav_bar.dart';
 import '../../core/widgets/ground_status_chip.dart';
+import '../../core/screens/send_notice_screen.dart';
 import '../../core/widgets/profile_tab.dart';
 import 'admin_ground_screen.dart';
+import 'admin_refunds_tab.dart';
 
-/// Root shell for the admin: approve new grounds, and the Profile tab.
+/// Root shell for the admin: approve new grounds, send refunds, and Profile.
 class AdminHomeScreen extends StatefulWidget {
   const AdminHomeScreen({super.key});
 
@@ -26,10 +28,11 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
 
   static const _navItems = [
     NavItem(icon: Icons.fact_check_outlined, label: 'Approvals'),
+    NavItem(icon: Icons.currency_exchange, label: 'Refunds'),
     NavItem(icon: Icons.person_outline, label: 'Profile'),
   ];
 
-  final _tabs = const [_ApprovalsTab(), ProfileTab()];
+  final _tabs = const [_ApprovalsTab(), AdminRefundsTab(), ProfileTab()];
 
   @override
   Widget build(BuildContext context) {
@@ -135,7 +138,22 @@ class _ApprovalsTabState extends State<_ApprovalsTab> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
           children: [
-            Text('Ground approvals', style: AppTextStyles.heading.copyWith(color: AppColors.primaryGreen)),
+            Row(
+              children: [
+                Expanded(
+                  child: Text('Ground approvals',
+                      style: AppTextStyles.heading.copyWith(color: AppColors.primaryGreen)),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const SendNoticeScreen(asAdmin: true)),
+                  ),
+                  tooltip: 'Send a notice to everyone',
+                  icon: Icon(Icons.campaign_outlined, color: AppColors.primaryGreen),
+                ),
+              ],
+            ),
             const SizedBox(height: 4),
             Text('Check each lalpurja before customers can book the ground.', style: AppTextStyles.caption),
             const SizedBox(height: 16),

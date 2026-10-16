@@ -25,6 +25,7 @@ class _HomeTabState extends State<HomeTab> {
   List<GroundModel>? _grounds;
   String? _error;
   LatLng? _myLocation;
+  String _query = '';
 
   @override
   void initState() {
@@ -79,9 +80,15 @@ class _HomeTabState extends State<HomeTab> {
     Navigator.push(context, MaterialPageRoute(builder: (_) => GroundBookingScreen(ground: ground)));
   }
 
+  /// Grounds whose name, area or address contains every word typed.
+  bool _matches(GroundModel ground) {
+    final text = '${ground.name} ${ground.area} ${ground.address}'.toLowerCase();
+    return _query.toLowerCase().split(RegExp(r'\s+')).every(text.contains);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final grounds = [...?_grounds];
+    final grounds = [...?_grounds].where(_matches).toList();
     if (_myLocation != null) {
       grounds.sort((a, b) => _distanceTo(a)!.compareTo(_distanceTo(b)!));
     }
@@ -97,10 +104,12 @@ class _HomeTabState extends State<HomeTab> {
               initials: context.watch<ProfileProvider>().profile?.initials ?? '',
               photoUrl: context.watch<ProfileProvider>().profile?.avatarUrl ?? '',
               locationLabel: 'Baneshwor, Kathmandu',
-              hasNotification: true,
             ),
             const SizedBox(height: 16),
-            const GroundSearchBar(),
+            GroundSearchBar(
+              hintText: 'Search by ground name or area...',
+              onChanged: (text) => setState(() => _query = text.trim()),
+            ),
             const SizedBox(height: 16),
             const MapPreviewCard(),
             const SizedBox(height: 24),
@@ -127,7 +136,9 @@ class _HomeTabState extends State<HomeTab> {
                 child: Center(child: CircularProgressIndicator()),
               )
             else if (grounds.isEmpty)
-              const _Message(text: 'No grounds listed yet. Check back soon!')
+              _Message(text: _query.isEmpty
+                  ? 'No grounds listed yet. Check back soon!'
+                  : 'No ground matches "$_query". Try another name or area.')
             else
               for (final ground in grounds) ...[
                 GroundCard(

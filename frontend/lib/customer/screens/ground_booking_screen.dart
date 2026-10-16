@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_text_styles.dart';
+import '../../core/models/event_model.dart';
 import '../../core/models/ground_model.dart';
 import '../../core/services/api_exception.dart';
 import '../../core/services/futsal_api.dart';
 import '../../core/utils/time_format.dart';
 import '../../core/widgets/date_strip.dart';
+import '../../core/widgets/event_card.dart';
+import 'payment_screen.dart';
 
 const _daysToShow = 14;
 
@@ -25,7 +28,11 @@ class _GroundBookingScreenState extends State<GroundBookingScreen> {
   late DateTime _selectedDay;
 
   List<SlotModel>? _slots;
+  String? _closedReason; // set when the ground is closed on the selected day
   String? _slotsError;
+  List<EventModel> _events = [];
+  Set<String> _methods = {'cash'}; // what the server offers
+  String _method = 'cash';
   SlotModel? _selectedSlot;
   bool _isBooking = false;
 
@@ -41,6 +48,28 @@ class _GroundBookingScreenState extends State<GroundBookingScreen> {
     _days = [for (var i = 0; i < _daysToShow; i++) today.add(Duration(days: i))];
     _selectedDay = today;
     _loadSlots();
+    _loadEvents();
+    _loadPaymentMethods();
+  }
+
+  /// If this fails, cash at the ground is still offered.
+  Future<void> _loadPaymentMethods() async {
+    try {
+      final methods = await FutsalApi.fetchPaymentMethods();
+      if (mounted) setState(() => _methods = methods..add('cash'));
+    } on ApiException {
+      // ignore
+    }
+  }
+
+  /// Optional extra: if events fail to load, the page just doesn't show them.
+  Future<void> _loadEvents() async {
+    try {
+      final events = await FutsalApi.fetchEvents(groundId: widget.ground.id);
+      if (mounted) setState(() => _events = events.where((event) => !event.isExpired).toList());
+    } on ApiException {
+      // ignore
+    }
   }
 
   Future<void> _loadSlots() async {
@@ -51,9 +80,12 @@ class _GroundBookingScreenState extends State<GroundBookingScreen> {
       _selectedSlot = null;
     });
     try {
-      final slots = await FutsalApi.fetchSlots(widget.ground.id, _selectedDay);
+      final day = await FutsalApi.fetchSlots(widget.ground.id, _selectedDay);
       if (!mounted || generation != _loadGeneration) return;
-      setState(() => _slots = slots);
+      setState(() {
+        _slots = day.slots;
+        _closedReason = day.closedReason;
+      });
     } on ApiException catch (e) {
       if (!mounted || generation != _loadGeneration) return;
       setState(() => _slotsError = e.message);
@@ -72,12 +104,23 @@ class _GroundBookingScreenState extends State<GroundBookingScreen> {
 
     setState(() => _isBooking = true);
     try {
-      final booking = await FutsalApi.createBooking(
+      var (booking, payment) = await FutsalApi.createBooking(
         groundId: widget.ground.id,
         day: _selectedDay,
         startTime: slot.startTime,
+        paymentMethod: _method,
       );
       if (!mounted) return;
+      if (payment != null) {
+        final paid = await payForBooking(context, booking.id, payment);
+        if (!mounted) return;
+        if (paid == null) {
+          setState(() => _isBooking = false);
+          _loadSlots();
+          return;
+        }
+        booking = paid;
+      }
       await showDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
@@ -85,7 +128,9 @@ class _GroundBookingScreenState extends State<GroundBookingScreen> {
           title: const Text('Booked!'),
           content: Text(
             '${widget.ground.name}\n${booking.dateLabel} · ${booking.timeLabel}\n\n'
-            'Booking ref: ${booking.bookingRef}\nPay Rs ${booking.price.toStringAsFixed(0)} at the ground.',
+            'Booking ref: ${booking.bookingRef}\n'
+            '${booking.isPaid ? 'Paid Rs ${booking.price.toStringAsFixed(0)} with ${booking.paymentLabel} ✓' : 'Pay Rs ${booking.price.toStringAsFixed(0)} at the ground.'}'
+            '${booking.isPaid ? '\n\nFree cancellation for 2 hours, then 50% refund.' : ''}',
             textAlign: TextAlign.center,
           ),
           actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK'))],
@@ -114,6 +159,10 @@ class _GroundBookingScreenState extends State<GroundBookingScreen> {
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
         children: [
           _GroundSummary(ground: ground),
+          for (final period in ground.maintenance) ...[
+            const SizedBox(height: 12),
+            _MaintenanceNotice(period: period),
+          ],
           const SizedBox(height: 24),
           Text('Pick a date', style: AppTextStyles.subheading),
           const SizedBox(height: 12),
@@ -123,19 +172,50 @@ class _GroundBookingScreenState extends State<GroundBookingScreen> {
           const SizedBox(height: 12),
           _buildSlots(),
           const SizedBox(height: 24),
+          Text('How do you want to pay?', style: AppTextStyles.subheading),
+          const SizedBox(height: 12),
+          for (final (method, label, icon, colour) in [
+            ('esewa', 'eSewa', Icons.account_balance_wallet_outlined, const Color(0xFF60BB46)),
+            ('khalti', 'Khalti', Icons.account_balance_wallet_outlined, const Color(0xFF5C2D91)),
+            ('cash', 'Cash at the ground', Icons.payments_outlined, AppColors.darkGreen),
+          ])
+            _PaymentOption(
+              label: label,
+              icon: icon,
+              colour: colour,
+              selected: _method == method,
+              // Shown even when not set up yet, so customers know it's coming.
+              onTap: _methods.contains(method) ? () => setState(() => _method = method) : null,
+            ),
+          const SizedBox(height: 4),
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(color: AppColors.infoBannerBg, borderRadius: BorderRadius.circular(10)),
             child: Row(
               children: [
-                Icon(Icons.payments_outlined, size: 18, color: AppColors.infoBannerText),
+                Icon(Icons.info_outline, size: 18, color: AppColors.infoBannerText),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text('Pay in cash at the ground.', style: TextStyle(color: AppColors.infoBannerText)),
+                  child: Text(
+                    _method == 'cash'
+                        ? 'Pay in cash at the ground. You can cancel any time before the game starts.'
+                        : 'Your slot is held for 15 minutes while you pay. Refunds go back to the same '
+                            'account: full within 2 hours of booking, later 50%.',
+                    style: TextStyle(color: AppColors.infoBannerText),
+                  ),
                 ),
               ],
             ),
           ),
+          if (_events.isNotEmpty) ...[
+            const SizedBox(height: 24),
+            Text('Events at this ground', style: AppTextStyles.subheading),
+            const SizedBox(height: 12),
+            for (final event in _events) ...[
+              EventCard(event: event, showGround: false),
+              const SizedBox(height: 12),
+            ],
+          ],
         ],
       ),
       bottomNavigationBar: SafeArea(
@@ -150,11 +230,14 @@ class _GroundBookingScreenState extends State<GroundBookingScreen> {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
             child: _isBooking
-                ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                ? const SizedBox(
+                    height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                 : Text(
                     _selectedSlot == null
                         ? 'Select a time'
-                        : 'Book ${formatClock(_selectedSlot!.startTime)} · Rs ${_selectedSlot!.price.toStringAsFixed(0)}',
+                        : _method == 'cash'
+                            ? 'Book ${formatClock(_selectedSlot!.startTime)} · Rs ${_selectedSlot!.price.toStringAsFixed(0)}'
+                            : 'Pay Rs ${_selectedSlot!.price.toStringAsFixed(0)} with ${_method == 'khalti' ? 'Khalti' : 'eSewa'}',
                     style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
                   ),
           ),
@@ -179,6 +262,10 @@ class _GroundBookingScreenState extends State<GroundBookingScreen> {
         child: Center(child: CircularProgressIndicator()),
       );
     }
+    if (_closedReason != null) {
+      return Text('Closed for maintenance this day: $_closedReason. Please pick another date.',
+          style: AppTextStyles.body.copyWith(color: AppColors.statusPendingText));
+    }
     if (!slots.any((slot) => slot.available)) {
       return Text('No free slots on this day. Try another date.', style: AppTextStyles.body);
     }
@@ -199,7 +286,9 @@ class _GroundBookingScreenState extends State<GroundBookingScreen> {
             onSelected: slot.available ? (_) => setState(() => _selectedSlot = slot) : null,
             selectedColor: AppColors.primaryGreen,
             labelStyle: TextStyle(
-              color: _selectedSlot == slot ? Colors.white : (slot.available ? AppColors.textPrimary : AppColors.textSecondary),
+              color: _selectedSlot == slot
+                  ? Colors.white
+                  : (slot.available ? AppColors.textPrimary : AppColors.textSecondary),
               decoration: slot.available ? null : TextDecoration.lineThrough,
             ),
             showCheckmark: false,
@@ -241,11 +330,20 @@ class _GroundSummary extends StatelessWidget {
           const SizedBox(height: 12),
           Row(
             children: [
-              _Rate(label: 'Morning', hours: 'before ${formatClock('$dayStartsHour:00')}', price: ground.morningPrice,
+              _Rate(
+                  label: 'Morning',
+                  hours: 'before ${formatClock('$dayStartsHour:00')}',
+                  price: ground.morningPrice,
                   isPeak: ground.peakPrice == ground.morningPrice),
-              _Rate(label: 'Day', hours: '${formatClock('$dayStartsHour:00')} – ${formatClock('$eveningStartsHour:00')}',
-                  price: ground.dayPrice, isPeak: ground.peakPrice == ground.dayPrice),
-              _Rate(label: 'Evening', hours: 'from ${formatClock('$eveningStartsHour:00')}', price: ground.eveningPrice,
+              _Rate(
+                  label: 'Day',
+                  hours: '${formatClock('$dayStartsHour:00')} – ${formatClock('$eveningStartsHour:00')}',
+                  price: ground.dayPrice,
+                  isPeak: ground.peakPrice == ground.dayPrice),
+              _Rate(
+                  label: 'Evening',
+                  hours: 'from ${formatClock('$eveningStartsHour:00')}',
+                  price: ground.eveningPrice,
                   isPeak: ground.peakPrice == ground.eveningPrice),
             ],
           ),
@@ -278,8 +376,8 @@ class _Rate extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                   decoration: BoxDecoration(color: AppColors.badgeOrangeBg, borderRadius: BorderRadius.circular(6)),
-                  child: Text('Peak', style: TextStyle(fontSize: 10, color: AppColors.accentOrange,
-                      fontWeight: FontWeight.w700)),
+                  child: Text('Peak',
+                      style: TextStyle(fontSize: 10, color: AppColors.accentOrange, fontWeight: FontWeight.w700)),
                 ),
               ],
             ],
@@ -288,6 +386,88 @@ class _Rate extends StatelessWidget {
           Text('Rs ${price.toStringAsFixed(0)}', style: AppTextStyles.price.copyWith(fontSize: 15)),
           Text(hours, style: AppTextStyles.caption.copyWith(fontSize: 11), textAlign: TextAlign.center),
         ],
+      ),
+    );
+  }
+}
+
+/// "Closed for maintenance 20 – 22 Oct: Replacing the turf".
+class _MaintenanceNotice extends StatelessWidget {
+  final MaintenancePeriod period;
+
+  const _MaintenanceNotice({required this.period});
+
+  @override
+  Widget build(BuildContext context) {
+    final days = period.isOneDay
+        ? formatDateLong(period.startsOn)
+        : '${formatDateShort(period.startsOn)} – ${formatDateLong(period.endsOn)}';
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: AppColors.statusPendingBg, borderRadius: BorderRadius.circular(12)),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.construction, color: AppColors.statusPendingText),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Closed for maintenance: $days\n${period.reason}',
+              style: TextStyle(color: AppColors.statusPendingText),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PaymentOption extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color colour;
+  final bool selected;
+  final VoidCallback? onTap; // null = not available yet
+
+  const _PaymentOption({
+    required this.label,
+    required this.icon,
+    required this.colour,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final available = onTap != null;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Opacity(
+        opacity: available ? 1 : 0.5,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: selected ? colour.withValues(alpha: 0.1) : AppColors.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: selected ? colour : AppColors.divider, width: selected ? 2 : 1),
+            ),
+            child: Row(
+              children: [
+                Icon(icon, color: colour),
+                const SizedBox(width: 12),
+                Expanded(child: Text(label, style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600))),
+                if (available)
+                  Icon(selected ? Icons.radio_button_checked : Icons.radio_button_off,
+                      color: selected ? colour : AppColors.textSecondary)
+                else
+                  Text('Coming soon', style: AppTextStyles.caption),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

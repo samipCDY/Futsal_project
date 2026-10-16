@@ -1,18 +1,22 @@
 from datetime import datetime, timedelta
 
+from django.db import transaction
 from django.db.models import Count, Exists, OuterRef, Q
+from django.utils import timezone
 from django.utils.dateparse import parse_date
-from rest_framework import mixins, viewsets
+from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from accounts.permissions import IsAdminRole, IsGroundOwner
-from bookings.models import Booking
+from bookings.models import Booking, release_unpaid_slots
+from notifications.models import Notification
 
-from .models import Favourite, Ground, slot_has_started
-from .serializers import AdminGroundSerializer, GroundSerializer, OwnerGroundSerializer
+from .models import Event, Favourite, Ground, Maintenance, slot_has_started
+from .serializers import (AdminGroundSerializer, EventSerializer, GroundSerializer, MaintenanceSerializer,
+                          OwnerEventSerializer, OwnerGroundSerializer)
 
 
 class GroundViewSet(viewsets.ReadOnlyModelViewSet):
@@ -23,7 +27,8 @@ class GroundViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         mine = Favourite.objects.filter(ground=OuterRef('pk'), customer=self.request.user)
-        return Ground.objects.visible().annotate(is_favourite=Exists(mine))
+        return (Ground.objects.visible().annotate(is_favourite=Exists(mine))
+                .prefetch_related('maintenance_periods'))
 
     @action(detail=False)
     def favourites(self, request):
@@ -50,6 +55,8 @@ class GroundViewSet(viewsets.ReadOnlyModelViewSet):
         if day is None:
             raise ValidationError({'date': 'Pass a date as YYYY-MM-DD.'})
 
+        closure = ground.closure_on(day)
+        release_unpaid_slots()
         booked = set(
             ground.bookings.filter(date=day)
             .exclude(status=Booking.Status.CANCELLED)
@@ -62,9 +69,13 @@ class GroundViewSet(viewsets.ReadOnlyModelViewSet):
                 'start_time': start.strftime('%H:%M'),
                 'end_time': end.strftime('%H:%M'),
                 'price': f'{ground.price_at(start):.2f}',
-                'available': start not in booked and not slot_has_started(day, start),
+                'available': not closure and start not in booked and not slot_has_started(day, start),
             })
-        return Response({'date': day.isoformat(), 'slots': slots})
+        return Response({
+            'date': day.isoformat(),
+            'closed_reason': closure.reason if closure else None,
+            'slots': slots,
+        })
 
 
 class OwnerGroundViewSet(mixins.CreateModelMixin,
@@ -79,7 +90,84 @@ class OwnerGroundViewSet(mixins.CreateModelMixin,
     permission_classes = [IsAuthenticated, IsGroundOwner]
 
     def get_queryset(self):
-        return Ground.objects.filter(owner=self.request.user).order_by('-created_at')
+        return (Ground.objects.filter(owner=self.request.user).order_by('-created_at')
+                .prefetch_related('maintenance_periods'))
+
+    def perform_create(self, serializer):
+        serializer.save(owner=self.request.user)
+
+    @action(detail=True, methods=['post'])
+    def maintenance(self, request, pk=None):
+        """Closes the ground from `starts_on` to `ends_on` (inclusive) with a
+        `reason` customers see. Everyone already booked on those days is
+        cancelled with a full refund and told why."""
+        ground = self.get_object()
+        serializer = MaintenanceSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        with transaction.atomic():
+            period = serializer.save(ground=ground)
+            affected = (ground.bookings
+                        .filter(date__range=(period.starts_on, period.ends_on),
+                                status__in=[Booking.Status.PENDING, Booking.Status.CONFIRMED])
+                        .select_related('ground', 'customer'))
+            cancelled = 0
+            for booking in affected:
+                if slot_has_started(booking.date, booking.start_time):
+                    continue
+                booking.cancel(Booking.CancelledBy.OWNER, f'Closed for maintenance: {period.reason}',
+                               kind=Notification.Kind.MAINTENANCE, title=f'{ground.name} is under maintenance')
+                cancelled += 1
+        return Response({**serializer.data, 'cancelled_bookings': cancelled}, status=status.HTTP_201_CREATED)
+
+
+class OwnerMaintenanceViewSet(mixins.DestroyModelMixin, viewsets.GenericViewSet):
+    """Lets an owner end a closure early (or call it off). Bookings that were
+    cancelled for it stay cancelled."""
+
+    permission_classes = [IsAuthenticated, IsGroundOwner]
+
+    def get_queryset(self):
+        return Maintenance.objects.filter(ground__owner=self.request.user)
+
+
+class EventViewSet(viewsets.ReadOnlyModelViewSet):
+    """Published events at listed grounds, for everyone: coming ones first
+    (soonest first), then ones that ended in the last month. `?ground=<id>`
+    for one ground's events."""
+
+    serializer_class = EventSerializer
+    pagination_class = None
+
+    def get_queryset(self):
+        cutoff = timezone.now() - timedelta(days=30)
+        events = Event.objects.filter(
+            Q(starts_at__gte=cutoff) | Q(ends_at__gte=cutoff),  # skip long-finished ones early
+            is_published=True,
+            ground__in=Ground.objects.visible(),
+        ).select_related('ground')
+        ground = self.request.query_params.get('ground', '')
+        if ground.isdigit():
+            events = events.filter(ground_id=ground)
+        return events
+
+    def list(self, request, *args, **kwargs):
+        events = list(self.get_queryset())
+        recent = timezone.now() - timedelta(days=30)
+        coming = sorted((e for e in events if not e.is_expired), key=lambda e: e.starts_at)
+        ended = sorted((e for e in events if e.is_expired and e.expires_at >= recent),
+                       key=lambda e: e.expires_at, reverse=True)
+        return Response(self.get_serializer(coming + ended, many=True).data)
+
+
+class OwnerEventViewSet(viewsets.ModelViewSet):
+    """An owner's own events, drafts included. Publish by saving
+    `is_published: true`; unpublish with false."""
+
+    serializer_class = OwnerEventSerializer
+    permission_classes = [IsAuthenticated, IsGroundOwner]
+
+    def get_queryset(self):
+        return Event.objects.filter(owner=self.request.user).select_related('ground').order_by('-starts_at')
 
     def perform_create(self, serializer):
         serializer.save(owner=self.request.user)

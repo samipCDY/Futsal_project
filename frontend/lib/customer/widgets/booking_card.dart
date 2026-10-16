@@ -2,12 +2,17 @@ import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_text_styles.dart';
 import '../../core/models/booking_model.dart';
+import '../../core/utils/money.dart';
+import '../../core/utils/time_format.dart';
 
 class BookingCard extends StatelessWidget {
   final BookingModel booking;
   final VoidCallback? onCancel;
 
-  const BookingCard({super.key, required this.booking, this.onCancel});
+  /// Opens eSewa/Khalti again for a booking still waiting for payment.
+  final VoidCallback? onPay;
+
+  const BookingCard({super.key, required this.booking, this.onCancel, this.onPay});
 
   @override
   Widget build(BuildContext context) {
@@ -51,7 +56,7 @@ class BookingCard extends StatelessWidget {
           const SizedBox(height: 12),
           Divider(height: 1, color: AppColors.divider),
           const SizedBox(height: 12),
-          _BookingBody(booking: booking, onCancel: onCancel),
+          _BookingBody(booking: booking, onCancel: onCancel, onPay: onPay),
         ],
       ),
     );
@@ -61,8 +66,9 @@ class BookingCard extends StatelessWidget {
 class _BookingBody extends StatelessWidget {
   final BookingModel booking;
   final VoidCallback? onCancel;
+  final VoidCallback? onPay;
 
-  const _BookingBody({required this.booking, this.onCancel});
+  const _BookingBody({required this.booking, this.onCancel, this.onPay});
 
   Widget _priceRow() {
     if (booking.isPayAtGround) {
@@ -78,7 +84,7 @@ class _BookingBody extends StatelessWidget {
       children: [
         Text('Rs ${booking.price.toStringAsFixed(0)}', style: AppTextStyles.price),
         const SizedBox(width: 8),
-        Text('Paid via', style: TextStyle(color: AppColors.textSecondary)),
+        Text(booking.isPaid ? 'Paid via' : 'Not paid yet ·', style: TextStyle(color: AppColors.textSecondary)),
         const SizedBox(width: 6),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -136,6 +142,16 @@ class _BookingBody extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             _WideActionButton(label: 'Cancel Booking', onTap: onCancel),
+            if (booking.isPaid && booking.freeCancelUntil != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                booking.isFreeToCancel
+                    ? 'Free cancellation until ${formatClockOf(booking.freeCancelUntil!)} · then 50% refund'
+                    : 'Cancelling now refunds 50% (${formatRupees(booking.refundIfCancelledNow ?? 0)})',
+                style: AppTextStyles.caption,
+                textAlign: TextAlign.center,
+              ),
+            ],
           ],
         );
 
@@ -154,17 +170,36 @@ class _BookingBody extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  Icon(Icons.info_outline, size: 16, color: AppColors.infoBannerText),
+                  Icon(Icons.timer_outlined, size: 16, color: AppColors.infoBannerText),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Waiting for arena confirmation...',
+                      booking.paymentDueBy == null
+                          ? 'Waiting for payment...'
+                          : 'Waiting for payment · slot held until ${formatClockOf(booking.paymentDueBy!)}',
                       style: TextStyle(color: AppColors.infoBannerText, fontSize: 13),
                     ),
                   ),
                 ],
               ),
             ),
+            if (onPay != null) ...[
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: onPay,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primaryGreen,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  child: Text('Pay now with ${booking.paymentLabel}',
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                ),
+              ),
+            ],
             const SizedBox(height: 10),
             _WideActionButton(label: 'Cancel Booking', onTap: onCancel),
           ],
@@ -180,9 +215,34 @@ class _BookingBody extends StatelessWidget {
         );
 
       case BookingStatus.cancelled:
-        return Text(
-          'Cancelled · Rs ${booking.price.toStringAsFixed(0)}',
-          style: TextStyle(color: AppColors.textSecondary),
+        final refund = booking.refundAmount;
+        final byGround = booking.cancelledBy == 'owner';
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              byGround ? 'Cancelled by the ground' : 'Cancelled by you',
+              style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+            ),
+            if (byGround && booking.cancelReason.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(booking.cancelReason, style: TextStyle(color: AppColors.textSecondary)),
+            ],
+            if (refund != null && refund > 0) ...[
+              const SizedBox(height: 4),
+              Text(
+                'Refund ${formatRupees(refund)} of ${formatRupees(booking.price)}'
+                ' (${(refund / booking.price * 100).round()}%)',
+                style: TextStyle(color: AppColors.primaryGreen, fontWeight: FontWeight.w700),
+              ),
+              if (booking.refundStatus == 'pending')
+                Text('Being sent back to your ${booking.paymentLabel} account',
+                    style: TextStyle(color: AppColors.textSecondary, fontSize: 13))
+              else if (booking.refundStatus == 'done')
+                Text('Refunded to your ${booking.paymentLabel} account ✓',
+                    style: TextStyle(color: AppColors.primaryGreen, fontSize: 13)),
+            ],
+          ],
         );
     }
   }

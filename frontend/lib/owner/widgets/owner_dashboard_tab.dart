@@ -3,10 +3,12 @@ import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_text_styles.dart';
 import '../../core/providers/profile_provider.dart';
+import '../../core/screens/send_notice_screen.dart';
 import '../../core/services/api_exception.dart';
 import '../../core/services/futsal_api.dart';
 import '../../core/services/owner_api.dart';
 import '../../core/utils/money.dart';
+import '../../core/widgets/notification_bell.dart';
 import '../../core/widgets/profile_avatar.dart';
 import '../screens/ground_form_screen.dart';
 import 'owner_booking_tile.dart';
@@ -80,6 +82,7 @@ class _OwnerDashboardTabState extends State<OwnerDashboardTab> {
                     ],
                   ),
                 ),
+                const NotificationBell(),
               ],
             ),
             const SizedBox(height: 20),
@@ -130,7 +133,21 @@ class _OwnerDashboardTabState extends State<OwnerDashboardTab> {
                       value: '${summary.activeGrounds} of ${summary.totalGrounds}'),
                 ],
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 12),
+              if (summary.totalGrounds > 0)
+                OutlinedButton.icon(
+                  onPressed: () =>
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => const SendNoticeScreen())),
+                  icon: const Icon(Icons.campaign_outlined),
+                  label: const Text('Message your customers'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.primaryGreen,
+                    side: BorderSide(color: AppColors.primaryGreen),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              const SizedBox(height: 16),
               Row(
                 children: [
                   Expanded(child: Text('Upcoming games', style: AppTextStyles.subheading)),

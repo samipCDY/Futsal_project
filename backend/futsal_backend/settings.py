@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'accounts',
     'grounds',
     'bookings',
+    'notifications',
 ]
 
 # Use the project's email-based account model instead of Django's default
@@ -173,6 +174,21 @@ SUPABASE_JWKS_URL = f'{SUPABASE_JWT_ISSUER}/.well-known/jwks.json'
 # Secret (service role) key, only so the admin panel can open the private
 # lalpurja photos. Never put it in the app.
 SUPABASE_SECRET_KEY = os.environ.get('SUPABASE_SECRET_KEY', '')
+
+# Online payment. Defaults are eSewa's public TEST merchant (no real money).
+# For real payments, set the live values from eSewa/Khalti in .env.
+# (`or` so a blank line in .env still falls back to the test values.)
+ESEWA_PRODUCT_CODE = os.environ.get('ESEWA_PRODUCT_CODE') or 'EPAYTEST'
+ESEWA_SECRET_KEY = os.environ.get('ESEWA_SECRET_KEY') or '8gBm/:&EnhH.1/q'  # eSewa's published test key
+ESEWA_FORM_URL = os.environ.get('ESEWA_FORM_URL') or 'https://rc-epay.esewa.com.np/api/epay/main/v2/form'
+ESEWA_STATUS_URL = os.environ.get('ESEWA_STATUS_URL') or 'https://rc.esewa.com.np/api/epay/transaction/status/'
+# From test-admin.khalti.com (sandbox) or admin.khalti.com (live). Empty = Khalti not offered.
+KHALTI_SECRET_KEY = os.environ.get('KHALTI_SECRET_KEY', '')
+KHALTI_BASE_URL = os.environ.get('KHALTI_BASE_URL') or 'https://dev.khalti.com/api/v2/'
+# The gateways send the customer back here. The app catches it before it
+# loads, so it never has to be a real page.
+PAYMENT_RETURN_URL = os.environ.get('PAYMENT_RETURN_URL') or 'https://futsalfinder.app/payment/'
+PAYMENT_WEBSITE_URL = os.environ.get('PAYMENT_WEBSITE_URL') or 'https://futsalfinder.app/'
 
 # Where links in emails point, e.g. to a ground in the admin panel.
 BACKEND_URL = os.environ.get('BACKEND_URL', 'http://localhost:8000').rstrip('/')

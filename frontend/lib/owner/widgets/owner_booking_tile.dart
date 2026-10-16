@@ -85,12 +85,30 @@ class OwnerBookingTile extends StatelessWidget {
             children: [
               Text(formatRupees(booking.price), style: AppTextStyles.price.copyWith(fontSize: 15)),
               const SizedBox(width: 6),
-              Text(booking.isPayAtGround ? '· cash at ground' : '· paid via ${booking.paymentLabel}',
+              Text(
+                  booking.isPayAtGround
+                      ? '· cash at ground'
+                      : booking.isPaid
+                          ? '· paid via ${booking.paymentLabel}'
+                          : '· waiting for ${booking.paymentLabel} payment',
                   style: AppTextStyles.caption),
               const Spacer(),
               Text(booking.bookingRef, style: AppTextStyles.caption),
             ],
           ),
+          if (isCancelled && booking.refundAmount != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              !booking.isPaid
+                  ? '${booking.cancelledBy == 'owner' ? 'You' : 'Customer'} cancelled · nothing was paid'
+                  : booking.cancelledBy == 'owner'
+                      ? 'You cancelled · full refund ${formatRupees(booking.refundAmount!)}'
+                      : 'Customer cancelled · refund ${formatRupees(booking.refundAmount!)}'
+                          ' · you keep ${formatRupees(booking.ownerKeeps)}',
+              style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w600),
+            ),
+            if (booking.cancelReason.isNotEmpty) Text(booking.cancelReason, style: AppTextStyles.caption),
+          ],
           if (onCancel != null && booking.isUpcoming) ...[
             const SizedBox(height: 8),
             SizedBox(

@@ -8,6 +8,7 @@ import '../../core/services/owner_api.dart';
 import '../../core/utils/money.dart';
 import '../../core/utils/time_format.dart';
 import '../screens/ground_form_screen.dart';
+import '../screens/maintenance_screen.dart';
 import '../../core/widgets/ground_status_chip.dart';
 
 /// The owner's grounds: add new ones, edit them, show or hide them.
@@ -115,6 +116,10 @@ class _OwnerGroundsTabState extends State<OwnerGroundsTab> {
                   _OwnerGroundCard(
                     ground: ground,
                     onEdit: () => _openForm(ground),
+                    onMaintenance: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => MaintenanceScreen(ground: ground)),
+                    ),
                     onActiveChanged: (active) => _setActive(ground, active),
                   ),
                   const SizedBox(height: 16),
@@ -130,9 +135,15 @@ class _OwnerGroundsTabState extends State<OwnerGroundsTab> {
 class _OwnerGroundCard extends StatelessWidget {
   final GroundModel ground;
   final VoidCallback onEdit;
+  final VoidCallback onMaintenance;
   final ValueChanged<bool> onActiveChanged;
 
-  const _OwnerGroundCard({required this.ground, required this.onEdit, required this.onActiveChanged});
+  const _OwnerGroundCard({
+    required this.ground,
+    required this.onEdit,
+    required this.onMaintenance,
+    required this.onActiveChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -192,6 +203,13 @@ class _OwnerGroundCard extends StatelessWidget {
                     ' · Evening ${formatRupees(ground.eveningPrice)}',
                     style: AppTextStyles.caption,
                   ),
+                  for (final period in ground.maintenance) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      '🛠 Closed ${period.isOneDay ? formatDateShort(period.startsOn) : '${formatDateShort(period.startsOn)} – ${formatDateShort(period.endsOn)}'}: ${period.reason}',
+                      style: AppTextStyles.caption.copyWith(color: AppColors.statusPendingText, fontWeight: FontWeight.w600),
+                    ),
+                  ],
                   if (ground.status != GroundStatus.approved) ...[
                     const SizedBox(height: 10),
                     _ReviewMessage(ground: ground),
@@ -217,6 +235,12 @@ class _OwnerGroundCard extends StatelessWidget {
                         onChanged: onActiveChanged,
                       ),
                     ],
+                  ),
+                  TextButton.icon(
+                    onPressed: onMaintenance,
+                    icon: const Icon(Icons.construction, size: 18),
+                    label: Text(ground.maintenance.isEmpty ? 'Close for maintenance' : 'Maintenance'),
+                    style: TextButton.styleFrom(padding: EdgeInsets.zero, foregroundColor: AppColors.statusPendingText),
                   ),
                 ],
               ),
