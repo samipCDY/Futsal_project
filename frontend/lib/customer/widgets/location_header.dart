@@ -39,11 +39,16 @@ class LocationHeader extends StatelessWidget {
                 ),
                 Row(
                   children: [
-                    Text(
-                      locationLabel,
-                      style: AppTextStyles.subheading.copyWith(color: AppColors.primaryGreen),
+                    Flexible(
+                      child: Text(
+                        locationLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.subheading.copyWith(color: AppColors.primaryGreen),
+                      ),
                     ),
-                    Icon(Icons.keyboard_arrow_down, color: AppColors.primaryGreen, size: 20),
+                    const SizedBox(width: 2),
+                    Icon(Icons.refresh, color: AppColors.primaryGreen, size: 18),
                   ],
                 ),
               ],

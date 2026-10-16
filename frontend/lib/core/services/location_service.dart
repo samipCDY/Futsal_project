@@ -1,3 +1,4 @@
+import 'package:geocoding/geocoding.dart' as geo;
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 
@@ -29,6 +30,32 @@ class LocationService {
       permission = await Geolocator.requestPermission();
     }
     return permission != LocationPermission.denied && permission != LocationPermission.deniedForever;
+  }
+
+  /// The town and district at [point], e.g. "Bharatpur, Chitwan", using
+  /// the phone's own address lookup (free, no key). Null when there's no
+  /// internet or no answer.
+  static Future<String?> placeName(LatLng point) async {
+    try {
+      final places = await geo.Geocoding().placemarkFromCoordinates(point.latitude, point.longitude);
+      if (places.isEmpty) return null;
+      final place = places.first;
+      String? clean(String? value) {
+        final text = (value ?? '').replaceAll(RegExp(r'\s+(District|Municipality|Metropolitan City)$'), '').trim();
+        return text.isEmpty ? null : text;
+      }
+
+      final town = clean(place.subLocality) ?? clean(place.locality) ?? clean(place.name);
+      final region = clean(place.subAdministrativeArea) ?? clean(place.locality) ?? clean(place.administrativeArea);
+      final parts = <String>[
+        if (town != null) town,
+        if (region != null && region != town) region,
+      ];
+      return parts.isEmpty ? null : parts.join(', ');
+    } catch (_) {
+      // No network, no geocoder on this phone, or not supported (web).
+      return null;
+    }
   }
 
   static double kmBetween(LatLng a, LatLng b) =>

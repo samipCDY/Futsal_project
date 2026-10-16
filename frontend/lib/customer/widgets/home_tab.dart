@@ -13,6 +13,7 @@ import 'location_header.dart';
 import 'ground_search_bar.dart';
 import 'map_preview_card.dart';
 import 'ground_card.dart';
+import 'ground_filters.dart';
 
 class HomeTab extends StatefulWidget {
   /// Switches to the Map tab.
@@ -28,7 +29,11 @@ class _HomeTabState extends State<HomeTab> {
   List<GroundModel>? _grounds;
   String? _error;
   LatLng? _myLocation;
+  String? _placeName;
+  bool _locating = false;
   String _query = '';
+  GroundFilters _filters = GroundFilters.none;
+  GroundSort _sort = GroundSort.nearest;
 
   @override
   void initState() {
@@ -56,9 +61,40 @@ class _HomeTabState extends State<HomeTab> {
     }
   }
 
-  Future<void> _locate() async {
+  /// Finds where the customer is and the town's name. Tapping the location
+  /// at the top runs it again, e.g. after travelling.
+  Future<void> _locate({bool tapped = false}) async {
+    if (_locating) return;
+    setState(() => _locating = true);
     final location = await LocationService.current();
-    if (mounted && location != null) setState(() => _myLocation = location);
+    final name = location == null ? null : await LocationService.placeName(location);
+    if (!mounted) return;
+    setState(() {
+      _locating = false;
+      if (location != null) _myLocation = location;
+      _placeName = name;
+    });
+    if (location == null && tapped) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Turn on location and allow it for Futsal Finder to find grounds near you.')),
+      );
+    }
+  }
+
+  String get _locationLabel {
+    if (_locating && _placeName == null) return 'Finding you...';
+    if (_myLocation == null) return 'Location off · tap to retry';
+    return _placeName ?? 'Near you';
+  }
+
+  /// Nearest needs a location; without one, best rated comes first.
+  GroundSort get _effectiveSort =>
+      _sort == GroundSort.nearest && _myLocation == null ? GroundSort.rating : _sort;
+
+  Future<void> _openFilters() async {
+    final filters =
+        await showGroundFiltersSheet(context, current: _filters, hasLocation: _myLocation != null);
+    if (filters != null && mounted) setState(() => _filters = filters);
   }
 
   double? _distanceTo(GroundModel ground) =>
@@ -93,45 +129,83 @@ class _HomeTabState extends State<HomeTab> {
 
   @override
   Widget build(BuildContext context) {
-    final grounds = [...?_grounds].where(_matches).toList();
-    if (_myLocation != null) {
-      grounds.sort((a, b) => _distanceTo(a)!.compareTo(_distanceTo(b)!));
-    }
+    final now = DateTime.now();
+    final grounds = [...?_grounds]
+        .where((g) => _matches(g) && _filters.matches(g, distanceKm: _distanceTo(g), now: now))
+        .toList();
+    final sort = _effectiveSort;
+    sort.apply(grounds, _distanceTo);
 
     return SafeArea(
       bottom: false,
       child: RefreshIndicator(
-        onRefresh: _load,
+        onRefresh: () async {
+          await Future.wait([_load(), _locate()]);
+        },
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
           children: [
             LocationHeader(
               initials: context.watch<ProfileProvider>().profile?.initials ?? '',
               photoUrl: context.watch<ProfileProvider>().profile?.avatarUrl ?? '',
-              locationLabel: 'Baneshwor, Kathmandu',
+              locationLabel: _locationLabel,
+              onLocationTap: () => _locate(tapped: true),
             ),
             const SizedBox(height: 16),
             GroundSearchBar(
               hintText: 'Search by ground name or area...',
               onChanged: (text) => setState(() => _query = text.trim()),
+              onFilterTap: _openFilters,
+              activeFilters: _filters.activeCount,
             ),
             const SizedBox(height: 16),
             MapPreviewCard(grounds: _grounds ?? const [], myLocation: _myLocation, onMapViewTap: widget.onOpenMap),
             const SizedBox(height: 24),
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(_myLocation == null ? 'Grounds' : 'Grounds near you', style: AppTextStyles.heading),
-                if (_myLocation != null)
-                  Row(
-                    children: [
-                      Text('Sort: Nearest', style: AppTextStyles.body),
-                      const SizedBox(width: 4),
-                      Icon(Icons.sort, size: 18, color: AppColors.textSecondary),
-                    ],
+                Expanded(
+                  child: Text(sort == GroundSort.nearest ? 'Grounds near you' : 'Grounds',
+                      style: AppTextStyles.heading),
+                ),
+                PopupMenuButton<GroundSort>(
+                  tooltip: 'Sort',
+                  initialValue: sort,
+                  onSelected: (choice) => setState(() => _sort = choice),
+                  itemBuilder: (_) => [
+                    for (final option in GroundSort.values)
+                      PopupMenuItem(
+                        value: option,
+                        enabled: option != GroundSort.nearest || _myLocation != null,
+                        child: Text(option == GroundSort.nearest && _myLocation == null
+                            ? 'Nearest (turn on location)'
+                            : option.label),
+                      ),
+                  ],
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Row(
+                      children: [
+                        Text('Sort: ${sort.label}', style: AppTextStyles.body),
+                        const SizedBox(width: 4),
+                        Icon(Icons.sort, size: 18, color: AppColors.textSecondary),
+                      ],
+                    ),
                   ),
+                ),
               ],
             ),
+            if (_filters.activeCount > 0 && _grounds != null)
+              Row(
+                children: [
+                  Text('${grounds.length} of ${_grounds!.length} grounds match your filters',
+                      style: AppTextStyles.caption),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () => setState(() => _filters = GroundFilters.none),
+                    child: const Text('Clear filters'),
+                  ),
+                ],
+              ),
             const SizedBox(height: 16),
             if (_error != null)
               _Message(text: _error!, onRetry: _load)
@@ -141,9 +215,12 @@ class _HomeTabState extends State<HomeTab> {
                 child: Center(child: CircularProgressIndicator()),
               )
             else if (grounds.isEmpty)
-              _Message(text: _query.isEmpty
-                  ? 'No grounds listed yet. Check back soon!'
-                  : 'No ground matches "$_query". Try another name or area.')
+              _Message(
+                  text: _query.isNotEmpty
+                      ? 'No ground matches "$_query". Try another name or area.'
+                      : _filters.activeCount > 0
+                          ? 'No ground matches your filters. Try loosening them.'
+                          : 'No grounds listed yet. Check back soon!')
             else
               for (final ground in grounds) ...[
                 GroundCard(

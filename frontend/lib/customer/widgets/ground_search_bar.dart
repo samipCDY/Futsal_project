@@ -6,11 +6,15 @@ class GroundSearchBar extends StatelessWidget {
   final ValueChanged<String>? onChanged;
   final String hintText;
 
+  /// How many filters are on; shown as a badge on the filter button.
+  final int activeFilters;
+
   const GroundSearchBar({
     super.key,
     this.onFilterTap,
     this.onChanged,
     this.hintText = 'Search futsal grounds...',
+    this.activeFilters = 0,
   });
 
   @override
@@ -46,17 +50,25 @@ class GroundSearchBar extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 10),
-        InkWell(
-          onTap: onFilterTap,
-          borderRadius: BorderRadius.circular(14),
-          child: Container(
-            height: 48,
-            width: 48,
-            decoration: BoxDecoration(
-              color: AppColors.primaryGreen,
-              borderRadius: BorderRadius.circular(14),
+        Tooltip(
+          message: 'Filters',
+          child: InkWell(
+            onTap: onFilterTap,
+            borderRadius: BorderRadius.circular(14),
+            child: Badge(
+              isLabelVisible: activeFilters > 0,
+              label: Text('$activeFilters'),
+              backgroundColor: AppColors.accentOrange,
+              child: Container(
+                height: 48,
+                width: 48,
+                decoration: BoxDecoration(
+                  color: AppColors.primaryGreen,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(Icons.tune, color: Colors.white, size: 20),
+              ),
             ),
-            child: const Icon(Icons.tune, color: Colors.white, size: 20),
           ),
         ),
       ],
