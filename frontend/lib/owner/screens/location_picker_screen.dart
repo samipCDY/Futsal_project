@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_text_styles.dart';
 import '../../core/services/location_service.dart';
@@ -17,10 +18,7 @@ class LocationPickerScreen extends StatefulWidget {
 }
 
 class _LocationPickerScreenState extends State<LocationPickerScreen> {
-  GoogleMapController? _map;
-  late LatLng _center = widget.initial ?? LocationService.fallback;
-  // Satellite helps owners spot their pitch from above.
-  MapType _mapType = MapType.hybrid;
+  final _mapController = MapController();
 
   @override
   void initState() {
@@ -38,13 +36,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       );
       return;
     }
-    _map?.animateCamera(CameraUpdate.newLatLngZoom(location, 18));
-  }
-
-  @override
-  void dispose() {
-    _map?.dispose();
-    super.dispose();
+    _mapController.move(location, 17);
   }
 
   @override
@@ -57,16 +49,10 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          GoogleMap(
-            initialCameraPosition: CameraPosition(target: _center, zoom: 17),
-            onMapCreated: (controller) => _map = controller,
-            onCameraMove: (camera) => _center = camera.target,
-            mapType: _mapType,
-            style: _mapType == MapType.normal ? mapStyleFor(context) : null,
-            myLocationButtonEnabled: false,
-            zoomControlsEnabled: false,
-            mapToolbarEnabled: false,
-            padding: const EdgeInsets.only(top: 70, bottom: 130),
+          FlutterMap(
+            mapController: _mapController,
+            options: MapOptions(initialCenter: widget.initial ?? LocationService.fallback, initialZoom: 16),
+            children: [osmTiles(context), osmAttribution],
           ),
           IgnorePointer(
             child: Center(
@@ -96,16 +82,6 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   FloatingActionButton.small(
-                    heroTag: 'map-type',
-                    tooltip: _mapType == MapType.normal ? 'Satellite view' : 'Map view',
-                    onPressed: () => setState(
-                        () => _mapType = _mapType == MapType.normal ? MapType.hybrid : MapType.normal),
-                    backgroundColor: AppColors.surface,
-                    child: Icon(_mapType == MapType.normal ? Icons.satellite_alt_outlined : Icons.map_outlined,
-                        color: AppColors.primaryGreen),
-                  ),
-                  const SizedBox(height: 8),
-                  FloatingActionButton.small(
                     heroTag: 'my-location',
                     onPressed: _goToMyLocation,
                     backgroundColor: AppColors.surface,
@@ -115,7 +91,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
-                      onPressed: () => Navigator.pop(context, _center),
+                      onPressed: () => Navigator.pop(context, _mapController.camera.center),
                       icon: const Icon(Icons.check_circle_outline),
                       label: const Text('Use this location', style: TextStyle(fontWeight: FontWeight.w600)),
                       style: ElevatedButton.styleFrom(

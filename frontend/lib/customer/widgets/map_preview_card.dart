@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/models/ground_model.dart';
 import '../../core/services/location_service.dart';
 import 'map_ground_pin.dart';
 
-/// A small, still Google map of the grounds around the customer. Tapping it
-/// (or "Map view") opens the full Map tab.
-class MapPreviewCard extends StatefulWidget {
+/// A small, still map of the grounds around the customer. Tapping it (or
+/// "Map view") opens the full Map tab.
+class MapPreviewCard extends StatelessWidget {
   final List<GroundModel> grounds;
   final LatLng? myLocation;
   final VoidCallback? onMapViewTap;
@@ -15,35 +16,8 @@ class MapPreviewCard extends StatefulWidget {
   const MapPreviewCard({super.key, this.grounds = const [], this.myLocation, this.onMapViewTap});
 
   @override
-  State<MapPreviewCard> createState() => _MapPreviewCardState();
-}
-
-class _MapPreviewCardState extends State<MapPreviewCard> {
-  Map<PinKind, BitmapDescriptor> _pins = {};
-  String _pinsKey = '';
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _loadPins();
-  }
-
-  Future<void> _loadPins() async {
-    final ratio = MediaQuery.devicePixelRatioOf(context);
-    final key = '$ratio-${Theme.of(context).brightness}';
-    if (key == _pinsKey) return;
-    _pinsKey = key;
-    final pins = {
-      PinKind.open: await GroundPins.icon(PinKind.open, ratio),
-      PinKind.closed: await GroundPins.icon(PinKind.closed, ratio),
-    };
-    if (mounted) setState(() => _pins = pins);
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final center = widget.myLocation ?? LocationService.fallback;
+    final center = myLocation ?? LocationService.fallback;
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
       child: SizedBox(
@@ -53,43 +27,40 @@ class _MapPreviewCardState extends State<MapPreviewCard> {
             Positioned.fill(
               child: ColoredBox(
                 color: AppColors.mapPreviewBg,
-                child: GoogleMap(
+                child: FlutterMap(
                   // A new map when the location arrives, so it centres there.
                   key: ValueKey(center),
-                  initialCameraPosition: CameraPosition(target: center, zoom: 12.5),
-                  liteModeEnabled: true,
-                  style: mapStyleFor(context),
-                  markers: _pins.isEmpty
-                      ? const {}
-                      : {
-                          for (final ground in widget.grounds)
-                            Marker(
-                              markerId: MarkerId(ground.id),
-                              position: ground.location,
-                              icon: _pins[ground.closureOn(now) == null ? PinKind.open : PinKind.closed]!,
-                            ),
-                        },
-                  myLocationEnabled: widget.myLocation != null,
-                  myLocationButtonEnabled: false,
-                  zoomControlsEnabled: false,
-                  mapToolbarEnabled: false,
-                  compassEnabled: false,
-                  scrollGesturesEnabled: false,
-                  zoomGesturesEnabled: false,
-                  rotateGesturesEnabled: false,
-                  tiltGesturesEnabled: false,
+                  options: MapOptions(
+                    initialCenter: center,
+                    initialZoom: 12.5,
+                    interactionOptions: const InteractionOptions(flags: InteractiveFlag.none),
+                  ),
+                  children: [
+                    osmTiles(context),
+                    MarkerLayer(markers: [
+                      if (myLocation != null)
+                        Marker(point: myLocation!, width: 22, height: 22, child: const MyLocationDot()),
+                      for (final ground in grounds) groundMarker(ground),
+                    ]),
+                  ],
                 ),
               ),
             ),
-            // Catches taps so they open the Map tab instead of Google Maps.
+            // Catches taps so the whole card opens the Map tab.
             Positioned.fill(
-              child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: widget.onMapViewTap),
+              child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: onMapViewTap),
+            ),
+            Positioned(
+              left: 8,
+              bottom: 4,
+              child: Text('© OpenStreetMap',
+                  style: TextStyle(fontSize: 9, color: AppColors.textSecondary.withValues(alpha: 0.9))),
             ),
             Positioned(
               right: 12,
               bottom: 12,
               child: ElevatedButton.icon(
-                onPressed: widget.onMapViewTap,
+                onPressed: onMapViewTap,
                 icon: Icon(Icons.map_outlined, size: 18, color: AppColors.textPrimary),
                 label: Text('Map view', style: TextStyle(color: AppColors.textPrimary)),
                 style: ElevatedButton.styleFrom(

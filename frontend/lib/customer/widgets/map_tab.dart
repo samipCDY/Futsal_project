@@ -1,7 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_text_styles.dart';
 import '../../core/models/ground_model.dart';
@@ -15,33 +16,32 @@ import 'ground_reviews.dart';
 import 'map_controls.dart';
 import 'map_ground_pin.dart';
 
-/// Google map of every ground, each a drop-shaped pin (orange when closed
+const _minZoom = 4.0;
+const _maxZoom = 19.0;
+
+/// OpenStreetMap of every ground, each a drop-shaped pin (orange when closed
 /// for maintenance today). Tapping a pin opens its details like a place in
 /// Google Maps; the search bar finds grounds by name or area.
 class MapTab extends StatefulWidget {
   const MapTab({super.key});
 
   @override
-  State<MapTab> createState() => MapTabState();
+  State<MapTab> createState() => _MapTabState();
 }
 
-class MapTabState extends State<MapTab> {
+class _MapTabState extends State<MapTab> with SingleTickerProviderStateMixin {
   static const _sheetSize = 0.45;
 
-  GoogleMapController? _map;
+  final _map = MapController();
+  late final _flight = AnimationController(vsync: this, duration: const Duration(milliseconds: 550));
   List<GroundModel>? _grounds;
   String? _selectedId;
   LatLng? _myLocation;
-  bool _locationAllowed = false;
   StreamSubscription<LatLng>? _locationUpdates;
-  MapType _mapType = MapType.normal;
 
   final _search = TextEditingController();
   final _searchFocus = FocusNode();
   String _query = '';
-
-  Map<PinKind, BitmapDescriptor> _pins = {};
-  String _pinsKey = '';
 
   @override
   void initState() {
@@ -54,29 +54,15 @@ class MapTabState extends State<MapTab> {
   }
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _loadPins(); // again when the theme (pin colours) or screen density changes
-  }
-
-  @override
   void dispose() {
     FutsalApi.favouritesChanged.removeListener(_loadGrounds);
     FutsalApi.reviewsChanged.removeListener(_loadGrounds);
     _locationUpdates?.cancel();
+    _flight.dispose();
     _search.dispose();
     _searchFocus.dispose();
-    _map?.dispose();
+    _map.dispose();
     super.dispose();
-  }
-
-  Future<void> _loadPins() async {
-    final ratio = MediaQuery.devicePixelRatioOf(context);
-    final key = '$ratio-${Theme.of(context).brightness}';
-    if (key == _pinsKey) return;
-    _pinsKey = key;
-    final pins = {for (final kind in PinKind.values) kind: await GroundPins.icon(kind, ratio)};
-    if (mounted) setState(() => _pins = pins);
   }
 
   Future<void> _loadGrounds() async {
@@ -92,14 +78,9 @@ class MapTabState extends State<MapTab> {
     final location = await LocationService.current();
     if (!mounted || location == null) return;
     final firstFix = _myLocation == null;
-    setState(() {
-      _myLocation = location;
-      _locationAllowed = true;
-    });
-    if (firstFix && _selectedId == null) {
-      _map?.animateCamera(CameraUpdate.newLatLngZoom(location, 14));
-    }
-    // Keep distances right as the customer moves; the blue dot moves by itself.
+    setState(() => _myLocation = location);
+    if (firstFix && _selectedId == null) _flyTo(location, 14);
+    // Keep the blue dot and distances right as the customer moves.
     _locationUpdates ??= LocationService.watch().listen((location) {
       if (mounted) setState(() => _myLocation = location);
     });
@@ -116,15 +97,50 @@ class MapTabState extends State<MapTab> {
       }
       return;
     }
-    _map?.animateCamera(CameraUpdate.newLatLngZoom(location, 15));
+    _flyTo(location, 15);
   }
 
-  /// Opens [ground]'s details and moves the map so its pin sits above them.
-  /// Other tabs call this too, e.g. Home's map preview.
-  void showGround(GroundModel ground) {
+  /// Glides the map to [target] at [zoom]. [coveredBottom] is how many
+  /// pixels at the bottom are hidden (by the details sheet), so the target
+  /// lands in the middle of what's still visible.
+  void _flyTo(LatLng target, double zoom, {double coveredBottom = 0}) {
+    final camera = _map.camera;
+    final endZoom = zoom.clamp(_minZoom, _maxZoom).toDouble();
+    var endCenter = target;
+    if (coveredBottom > 0) {
+      final point = camera.crs.latLngToOffset(target, endZoom);
+      endCenter = camera.crs.offsetToLatLng(point + Offset(0, coveredBottom / 2), endZoom);
+    }
+    final start = camera.center;
+    final startZoom = camera.zoom;
+    final curve = CurvedAnimation(parent: _flight, curve: Curves.easeInOutCubic);
+    void step() {
+      final t = curve.value;
+      _map.move(
+        LatLng(start.latitude + (endCenter.latitude - start.latitude) * t,
+            start.longitude + (endCenter.longitude - start.longitude) * t),
+        startZoom + (endZoom - startZoom) * t,
+      );
+    }
+
+    _flight
+      ..stop()
+      ..reset();
+    _flight.addListener(step);
+    _flight.forward().whenCompleteOrCancel(() {
+      _flight.removeListener(step);
+      curve.dispose();
+    });
+  }
+
+  void _zoomBy(double delta) => _flyTo(_map.camera.center, _map.camera.zoom + delta);
+
+  /// Opens [ground]'s details and glides the map so its pin sits above them.
+  void _showGround(GroundModel ground) {
     _searchFocus.unfocus();
     setState(() => _selectedId = ground.id);
-    _map?.animateCamera(CameraUpdate.newLatLngZoom(ground.location, 16));
+    final zoom = _map.camera.zoom < 15 ? 16.0 : _map.camera.zoom;
+    _flyTo(ground.location, zoom, coveredBottom: MediaQuery.sizeOf(context).height * _sheetSize);
   }
 
   void _closeGround() => setState(() => _selectedId = null);
@@ -140,10 +156,9 @@ class MapTabState extends State<MapTab> {
       _myLocation == null ? null : LocationService.kmBetween(_myLocation!, ground.location);
 
   List<GroundModel> get _nearestFirst {
-    final grounds = [...?_grounds];
     final from = _myLocation ?? LocationService.fallback;
-    grounds.sort((a, b) => LocationService.kmBetween(from, a.location).compareTo(LocationService.kmBetween(from, b.location)));
-    return grounds;
+    return [...?_grounds]
+      ..sort((a, b) => LocationService.kmBetween(from, a.location).compareTo(LocationService.kmBetween(from, b.location)));
   }
 
   List<GroundModel> get _searchResults {
@@ -155,24 +170,16 @@ class MapTabState extends State<MapTab> {
         .toList();
   }
 
-  Set<Marker> _markers() {
-    if (_pins.isEmpty) return const {};
-    final now = DateTime.now();
-    return {
-      for (final ground in _grounds ?? const <GroundModel>[])
-        Marker(
-          markerId: MarkerId(ground.id),
-          position: ground.location,
-          icon: _pins[ground.id == _selectedId
-              ? PinKind.selected
-              : ground.closureOn(now) != null
-                  ? PinKind.closed
-                  : PinKind.open]!,
-          zIndexInt: ground.id == _selectedId ? 1 : 0,
-          consumeTapEvents: true,
-          onTap: () => showGround(ground),
-        ),
-    };
+  List<Marker> _markers() {
+    final grounds = [...?_grounds]
+      // The selected pin is drawn last so it's on top.
+      ..sort((a, b) => (a.id == _selectedId ? 1 : 0) - (b.id == _selectedId ? 1 : 0));
+    return [
+      if (_myLocation != null)
+        Marker(point: _myLocation!, width: 22, height: 22, child: const MyLocationDot()),
+      for (final ground in grounds)
+        groundMarker(ground, selected: ground.id == _selectedId, onTap: () => _showGround(ground)),
+    ];
   }
 
   Future<void> _toggleFavourite(GroundModel ground) async {
@@ -190,32 +197,34 @@ class MapTabState extends State<MapTab> {
   @override
   Widget build(BuildContext context) {
     final selected = _selected;
-    final screenHeight = MediaQuery.sizeOf(context).height;
+    final topInset = MediaQuery.paddingOf(context).top;
     final showResults = _searchFocus.hasFocus && _query.isNotEmpty;
 
     return Stack(
       fit: StackFit.expand,
       children: [
-        GoogleMap(
-          initialCameraPosition: CameraPosition(target: _myLocation ?? LocationService.fallback, zoom: 13),
-          onMapCreated: (controller) => _map = controller,
-          style: mapStyleFor(context),
-          mapType: _mapType,
-          markers: _markers(),
-          myLocationEnabled: _locationAllowed,
-          myLocationButtonEnabled: false,
-          zoomControlsEnabled: false,
-          mapToolbarEnabled: false,
-          compassEnabled: true,
-          // Keep Google's logo and the compass clear of our panels.
-          padding: EdgeInsets.only(
-            top: MediaQuery.paddingOf(context).top + 70,
-            bottom: selected != null ? screenHeight * _sheetSize : 140,
+        FlutterMap(
+          mapController: _map,
+          options: MapOptions(
+            initialCenter: _myLocation ?? LocationService.fallback,
+            initialZoom: 13,
+            minZoom: _minZoom,
+            maxZoom: _maxZoom,
+            // No twisting the map by accident; north stays up.
+            interactionOptions: const InteractionOptions(flags: InteractiveFlag.all & ~InteractiveFlag.rotate),
+            onPositionChanged: (_, hasGesture) {
+              if (hasGesture && _flight.isAnimating) _flight.stop();
+            },
+            onTap: (_, __) {
+              _searchFocus.unfocus();
+              if (_selectedId != null) _closeGround();
+            },
           ),
-          onTap: (_) {
-            _searchFocus.unfocus();
-            if (_selectedId != null) _closeGround();
-          },
+          children: [
+            osmTiles(context),
+            MarkerLayer(markers: _markers()),
+            osmAttribution,
+          ],
         ),
         Positioned(
           top: 0,
@@ -236,29 +245,24 @@ class MapTabState extends State<MapTab> {
                       setState(() => _query = '');
                     },
                   ),
-                  if (showResults) _SearchResults(results: _searchResults, distanceTo: _distanceTo, onTap: showGround),
+                  if (showResults) _SearchResults(results: _searchResults, distanceTo: _distanceTo, onTap: _showGround),
                 ],
               ),
             ),
           ),
         ),
-        if (!showResults)
+        if (!showResults) ...[
+          Positioned(
+            left: 16,
+            top: topInset + 80,
+            child: MapZoomControls(onZoomIn: () => _zoomBy(1), onZoomOut: () => _zoomBy(-1)),
+          ),
           Positioned(
             right: 16,
-            top: MediaQuery.paddingOf(context).top + 80,
-            child: Column(
-              children: [
-                MapControlButton(
-                  icon: _mapType == MapType.normal ? Icons.satellite_alt_outlined : Icons.map_outlined,
-                  tooltip: _mapType == MapType.normal ? 'Satellite view' : 'Map view',
-                  onTap: () => setState(
-                      () => _mapType = _mapType == MapType.normal ? MapType.hybrid : MapType.normal),
-                ),
-                const SizedBox(height: 10),
-                MapControlButton(icon: Icons.my_location, tooltip: 'My location', onTap: _goToMyLocation),
-              ],
-            ),
+            top: topInset + 80,
+            child: MapControlButton(icon: Icons.my_location, tooltip: 'My location', onTap: _goToMyLocation),
           ),
+        ],
         if (selected == null)
           Positioned(
             left: 0,
@@ -268,7 +272,7 @@ class MapTabState extends State<MapTab> {
               grounds: _nearestFirst,
               loading: _grounds == null,
               distanceTo: _distanceTo,
-              onTap: showGround,
+              onTap: _showGround,
             ),
           )
         else

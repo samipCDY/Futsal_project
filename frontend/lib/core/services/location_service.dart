@@ -1,5 +1,5 @@
 import 'package:geolocator/geolocator.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart' show LatLng;
+import 'package:latlong2/latlong.dart';
 
 class LocationService {
   /// Central Kathmandu, used before (or instead of) the device's location.

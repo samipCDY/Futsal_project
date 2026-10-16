@@ -1,49 +1,74 @@
 import 'dart:math' as math;
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/models/ground_model.dart';
 
-/// How a ground's pin looks on the map.
-enum PinKind { open, closed, selected }
+/// Pin sizes. The tip of the drop sits exactly on the ground's location.
+const pinWidth = 38.0;
+const pinHeight = 50.0;
+const selectedPinScale = 1.3;
 
-/// Draws the upside-down water-drop pins for grounds: green with a ball when
-/// open, orange with a cone when closed for maintenance today, and bigger
-/// and darker for the one being looked at. Each look is drawn once and
-/// reused.
-class GroundPins {
-  GroundPins._();
+/// An upside-down water drop marking a ground: green with a ball when open,
+/// orange with a cone when closed for maintenance today, bigger and darker
+/// when [selected].
+class GroundDropPin extends StatelessWidget {
+  final bool closed;
+  final bool selected;
 
-  static final _cache = <String, BitmapDescriptor>{};
+  const GroundDropPin({super.key, this.closed = false, this.selected = false});
 
-  static Future<BitmapDescriptor> icon(PinKind kind, double pixelRatio) async {
-    final (fill, glyph, scale) = switch (kind) {
-      PinKind.open => (AppColors.primaryGreen, Icons.sports_soccer, 1.0),
-      PinKind.closed => (AppColors.accentOrange, Icons.construction, 1.0),
-      PinKind.selected => (AppColors.darkGreen, Icons.sports_soccer, 1.3),
-    };
-    final key = '${kind.name}-${fill.toARGB32()}-$pixelRatio';
-    return _cache[key] ??= await _draw(fill, glyph, scale, pixelRatio);
+  @override
+  Widget build(BuildContext context) {
+    final fill = selected
+        ? AppColors.darkGreen
+        : closed
+            ? AppColors.accentOrange
+            : AppColors.primaryGreen;
+    final scale = selected ? selectedPinScale : 1.0;
+    final width = pinWidth * scale;
+    final height = pinHeight * scale;
+    final headRadius = width / 2 - 3;
+    return SizedBox(
+      width: width,
+      height: height,
+      child: CustomPaint(
+        painter: _DropPainter(fill),
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: Padding(
+            padding: EdgeInsets.only(top: 3 + headRadius * 0.38),
+            child: Container(
+              width: headRadius * 1.24,
+              height: headRadius * 1.24,
+              decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+              child: Icon(closed ? Icons.construction : Icons.sports_soccer, size: headRadius * 1.0, color: fill),
+            ),
+          ),
+        ),
+      ),
+    );
   }
+}
 
-  static Future<BitmapDescriptor> _draw(Color fill, IconData glyph, double scale, double pixelRatio) async {
-    final width = 38.0 * scale;
-    final height = 50.0 * scale;
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder)..scale(pixelRatio);
+class _DropPainter extends CustomPainter {
+  final Color fill;
 
-    final cx = width / 2;
-    final r = width / 2 - 3; // room for the white edge
+  const _DropPainter(this.fill);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cx = size.width / 2;
+    final r = size.width / 2 - 3; // room for the white edge
     final cy = r + 3;
-    final tip = height - 2;
+    final tip = size.height - 2;
     final drop = Path()
       ..moveTo(cx, tip)
       ..cubicTo(cx - r * 0.35, tip - r * 0.9, cx - r, cy + r * 0.8, cx - r, cy)
       ..arcTo(Rect.fromCircle(center: Offset(cx, cy), radius: r), math.pi, math.pi, false)
       ..cubicTo(cx + r, cy + r * 0.8, cx + r * 0.35, tip - r * 0.9, cx, tip)
       ..close();
-
     canvas.drawShadow(drop, Colors.black, 3, false);
     canvas.drawPath(drop, Paint()..color = fill);
     canvas.drawPath(
@@ -53,45 +78,74 @@ class GroundPins {
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2,
     );
-    canvas.drawCircle(Offset(cx, cy), r * 0.62, Paint()..color = Colors.white);
+  }
 
-    final iconSize = r * 1.0;
-    final painter = TextPainter(
-      textDirection: TextDirection.ltr,
-      text: TextSpan(
-        text: String.fromCharCode(glyph.codePoint),
-        style: TextStyle(fontFamily: glyph.fontFamily, package: glyph.fontPackage, fontSize: iconSize, color: fill),
+  @override
+  bool shouldRepaint(_DropPainter old) => old.fill != fill;
+}
+
+/// A map marker for [ground] whose tip points at its location.
+Marker groundMarker(GroundModel ground, {bool selected = false, VoidCallback? onTap}) {
+  final scale = selected ? selectedPinScale : 1.0;
+  final closed = ground.closureOn(DateTime.now()) != null;
+  return Marker(
+    key: ValueKey('${ground.id}-$selected'),
+    point: ground.location,
+    width: pinWidth * scale,
+    height: pinHeight * scale,
+    alignment: Alignment.topCenter, // the widget sits above the point
+    child: GestureDetector(
+      onTap: onTap,
+      child: Semantics(
+        button: onTap != null,
+        label: '${ground.name}${closed ? ', closed today' : ''}',
+        child: GroundDropPin(closed: closed, selected: selected),
       ),
-    )..layout();
-    painter.paint(canvas, Offset(cx - painter.width / 2, cy - painter.height / 2));
+    ),
+  );
+}
 
-    final image =
-        await recorder.endRecording().toImage((width * pixelRatio).ceil(), (height * pixelRatio).ceil());
-    final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-    return BitmapDescriptor.bytes(bytes!.buffer.asUint8List(), imagePixelRatio: pixelRatio);
+/// The user's own position on the map.
+class MyLocationDot extends StatelessWidget {
+  const MyLocationDot({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 22,
+      height: 22,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: const Color(0xFF3B82F6).withValues(alpha: 0.2),
+        shape: BoxShape.circle,
+      ),
+      child: Container(
+        width: 12,
+        height: 12,
+        decoration: const BoxDecoration(
+          color: Color(0xFF3B82F6),
+          shape: BoxShape.circle,
+          border: Border.fromBorderSide(BorderSide(color: Colors.white, width: 2)),
+        ),
+      ),
+    );
   }
 }
 
-/// Google's dark map colours, for when the app is in dark mode.
-const darkMapStyle = '''
-[
-  {"elementType": "geometry", "stylers": [{"color": "#212121"}]},
-  {"elementType": "labels.icon", "stylers": [{"visibility": "off"}]},
-  {"elementType": "labels.text.fill", "stylers": [{"color": "#9e9e9e"}]},
-  {"elementType": "labels.text.stroke", "stylers": [{"color": "#212121"}]},
-  {"featureType": "administrative", "elementType": "geometry", "stylers": [{"color": "#757575"}]},
-  {"featureType": "poi", "elementType": "labels.text.fill", "stylers": [{"color": "#757575"}]},
-  {"featureType": "poi.park", "elementType": "geometry", "stylers": [{"color": "#181818"}]},
-  {"featureType": "road", "elementType": "geometry.fill", "stylers": [{"color": "#2c2c2c"}]},
-  {"featureType": "road", "elementType": "labels.text.fill", "stylers": [{"color": "#8a8a8a"}]},
-  {"featureType": "road.arterial", "elementType": "geometry", "stylers": [{"color": "#373737"}]},
-  {"featureType": "road.highway", "elementType": "geometry", "stylers": [{"color": "#3c3c3c"}]},
-  {"featureType": "transit", "elementType": "labels.text.fill", "stylers": [{"color": "#757575"}]},
-  {"featureType": "water", "elementType": "geometry", "stylers": [{"color": "#000000"}]},
-  {"featureType": "water", "elementType": "labels.text.fill", "stylers": [{"color": "#3d3d3d"}]}
-]
-''';
+/// OpenStreetMap tiles. In dark mode they're recoloured dark (one filter
+/// over the whole layer, which is cheaper than one per tile). Tiles are
+/// cached on the phone, so places seen before load instantly.
+Widget osmTiles(BuildContext context) {
+  final tiles = TileLayer(
+    urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    userAgentPackageName: 'com.example.futsal_app',
+    maxNativeZoom: 19,
+  );
+  return Theme.of(context).brightness == Brightness.dark ? darkModeTilesContainerBuilder(context, tiles) : tiles;
+}
 
-/// The map style for the current theme (null = Google's normal colours).
-String? mapStyleFor(BuildContext context) =>
-    Theme.of(context).brightness == Brightness.dark ? darkMapStyle : null;
+/// OpenStreetMap's licence asks for this credit on every map.
+const osmAttribution = RichAttributionWidget(
+  alignment: AttributionAlignment.bottomLeft,
+  attributions: [TextSourceAttribution('OpenStreetMap contributors')],
+);

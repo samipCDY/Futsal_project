@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:google_maps_flutter/google_maps_flutter.dart' show LatLng;
+import 'package:latlong2/latlong.dart';
 
 /// Whether an admin has checked the ground's ownership document.
 enum GroundStatus { pending, approved, rejected }
