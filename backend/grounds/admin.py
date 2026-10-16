@@ -3,7 +3,7 @@ from django.utils import timezone
 from django.utils.html import format_html
 
 from . import notify
-from .models import Event, Favourite, Ground, Maintenance
+from .models import Event, Favourite, Ground, Maintenance, Review
 from .storage import signed_document_url
 
 
@@ -99,3 +99,14 @@ class EventAdmin(admin.ModelAdmin):
     list_filter = ('is_published',)
     search_fields = ('title', 'ground__name')
     raw_id_fields = ('owner', 'ground')
+
+
+@admin.register(Review)
+class ReviewAdmin(admin.ModelAdmin):
+    """Customers' star ratings. Delete one that breaks the rules."""
+
+    list_display = ('ground', 'rating', 'customer', 'comment', 'updated_at')
+    list_filter = ('rating',)
+    search_fields = ('ground__name', 'customer__full_name', 'comment')
+    raw_id_fields = ('ground',)
+    readonly_fields = ('customer', 'created_at', 'updated_at')

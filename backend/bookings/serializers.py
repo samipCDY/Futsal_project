@@ -23,6 +23,10 @@ class SlotAlreadyBooked(APIException):
 class BookingSerializer(serializers.ModelSerializer):
     ground = serializers.PrimaryKeyRelatedField(queryset=Ground.objects.visible())
     ground_name = serializers.CharField(source='ground.name', read_only=True)
+    ground_latitude = serializers.DecimalField(source='ground.latitude', max_digits=9, decimal_places=6,
+                                               read_only=True)
+    ground_longitude = serializers.DecimalField(source='ground.longitude', max_digits=9, decimal_places=6,
+                                                read_only=True)
     end_time = serializers.TimeField(read_only=True)
     customer_name = serializers.SerializerMethodField()
     customer_phone = serializers.SerializerMethodField()
@@ -33,7 +37,7 @@ class BookingSerializer(serializers.ModelSerializer):
     class Meta:
         model = Booking
         fields = [
-            'id', 'booking_ref', 'ground', 'ground_name', 'date', 'start_time', 'end_time',
+            'id', 'booking_ref', 'ground', 'ground_name', 'ground_latitude', 'ground_longitude', 'date', 'start_time', 'end_time',
             'price', 'payment_method', 'status', 'created_at', 'customer_name', 'customer_phone',
             'free_cancel_until', 'refund_if_cancelled_now', 'cancelled_by', 'cancelled_at', 'cancel_reason',
             'refund_amount', 'payment_status', 'payment_due_by', 'payment_txn_id', 'refund_status',

@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:latlong2/latlong.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart' show LatLng;
 
 /// Whether an admin has checked the ground's ownership document.
 enum GroundStatus { pending, approved, rejected }
@@ -28,6 +28,10 @@ class GroundModel {
   final String closesAt;
   final bool isActive;
 
+  /// Average stars (1-5), or null before anyone has reviewed it.
+  final double? rating;
+  final int reviewCount;
+
   // Only filled in for the ground's owner.
   final GroundStatus status;
   final String reviewNote;
@@ -52,6 +56,8 @@ class GroundModel {
     this.opensAt = '06:00:00',
     this.closesAt = '22:00:00',
     this.isActive = true,
+    this.rating,
+    this.reviewCount = 0,
     this.status = GroundStatus.approved,
     this.reviewNote = '',
     this.ownershipDocument = '',
@@ -77,6 +83,8 @@ class GroundModel {
       opensAt: json['opens_at'] as String? ?? '06:00:00',
       closesAt: json['closes_at'] as String? ?? '22:00:00',
       isActive: json['is_active'] as bool? ?? true,
+      rating: (json['rating'] as num?)?.toDouble(),
+      reviewCount: json['review_count'] as int? ?? 0,
       status: GroundStatus.values.asNameMap()[json['status']] ?? GroundStatus.approved,
       reviewNote: json['review_note'] as String? ?? '',
       ownershipDocument: json['ownership_document'] as String? ?? '',
@@ -103,6 +111,8 @@ class GroundModel {
         opensAt: opensAt,
         closesAt: closesAt,
         isActive: isActive,
+        rating: rating,
+        reviewCount: reviewCount,
         status: status,
         reviewNote: reviewNote,
         ownershipDocument: ownershipDocument,
@@ -122,6 +132,42 @@ class GroundModel {
 
   /// Customers see it only when it's approved and not hidden.
   bool get isLive => isActive && status == GroundStatus.approved;
+
+  /// The maintenance closing the ground on [day], or null.
+  MaintenancePeriod? closureOn(DateTime day) {
+    final date = DateTime(day.year, day.month, day.day);
+    for (final period in maintenance) {
+      if (!date.isBefore(period.startsOn) && !date.isAfter(period.endsOn)) return period;
+    }
+    return null;
+  }
+
+  /// Whether it's open at [now] and when that changes, e.g.
+  /// (true, 'Closes 10 PM') or (false, 'Opens 6 AM').
+  /// Closed all day for maintenance gives (false, the reason).
+  (bool, String) openStatus(DateTime now) {
+    final closure = closureOn(now);
+    if (closure != null) return (false, 'Closed for maintenance: ${closure.reason}');
+    final opens = _hourOf(opensAt);
+    final closes = _hourOf(closesAt);
+    final hour = now.hour + now.minute / 60;
+    if (hour >= opens && hour < closes) return (true, 'Closes ${_clock(closes)}');
+    if (hour < opens) return (false, 'Opens ${_clock(opens)}');
+    final tomorrow = now.add(const Duration(days: 1));
+    return (false, closureOn(tomorrow) == null ? 'Opens ${_clock(opens)} tomorrow' : 'Closed tomorrow too');
+  }
+
+  static double _hourOf(String time) {
+    final parts = time.split(':');
+    return int.parse(parts[0]) + int.parse(parts[1]) / 60;
+  }
+
+  static String _clock(double hour) {
+    final h = hour.floor();
+    final m = ((hour - h) * 60).round();
+    final h12 = h % 12 == 0 ? 12 : h % 12;
+    return '$h12${m == 0 ? '' : ':${m.toString().padLeft(2, '0')}'} ${h < 12 ? 'AM' : 'PM'}';
+  }
 }
 
 /// Days a ground is closed, e.g. to replace the turf.

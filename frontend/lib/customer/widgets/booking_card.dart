@@ -2,8 +2,12 @@ import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_text_styles.dart';
 import '../../core/models/booking_model.dart';
+import '../../core/services/api_exception.dart';
+import '../../core/services/futsal_api.dart';
 import '../../core/utils/money.dart';
 import '../../core/utils/time_format.dart';
+import 'ground_place_sheet.dart';
+import 'ground_reviews.dart';
 
 class BookingCard extends StatelessWidget {
   final BookingModel booking;
@@ -114,7 +118,9 @@ class _BookingBody extends StatelessWidget {
               children: [
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: () {},
+                    onPressed: booking.groundLatitude == null
+                        ? null
+                        : () => openDirections(context, booking.groundLatitude!, booking.groundLongitude!),
                     icon: const Icon(Icons.directions, size: 18, color: Colors.white),
                     label: const Text('Directions'),
                     style: ElevatedButton.styleFrom(
@@ -210,7 +216,7 @@ class _BookingBody extends StatelessWidget {
           children: [
             Text('How was your game?', style: AppTextStyles.subheading),
             const SizedBox(height: 8),
-            const _StarRating(initialRating: 0),
+            _RateGround(booking: booking),
           ],
         );
 
@@ -344,33 +350,39 @@ class _RefChip extends StatelessWidget {
   }
 }
 
-class _StarRating extends StatefulWidget {
-  final int initialRating;
+/// Five stars that open the review sheet for the ground, starting from the
+/// stars tapped (or the customer's earlier review).
+class _RateGround extends StatelessWidget {
+  final BookingModel booking;
 
-  const _StarRating({required this.initialRating});
+  const _RateGround({required this.booking});
 
-  @override
-  State<_StarRating> createState() => _StarRatingState();
-}
-
-class _StarRatingState extends State<_StarRating> {
-  late int _rating = widget.initialRating;
+  Future<void> _rate(BuildContext context, int stars) async {
+    try {
+      final reviews = await FutsalApi.fetchReviews(booking.groundId);
+      if (!context.mounted) return;
+      await showWriteReviewSheet(context,
+          groundId: booking.groundId,
+          groundName: booking.groundName,
+          existing: reviews.myReview,
+          stars: stars);
+    } on ApiException catch (e) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(5, (index) {
-        final filled = index < _rating;
-        return IconButton(
-          onPressed: () => setState(() => _rating = index + 1),
-          icon: Icon(
-            filled ? Icons.star : Icons.star_border,
-            color: AppColors.rating,
-            size: 28,
+      children: [
+        for (var stars = 1; stars <= 5; stars++)
+          IconButton(
+            tooltip: 'Rate $stars star${stars == 1 ? '' : 's'}',
+            onPressed: () => _rate(context, stars),
+            icon: Icon(Icons.star_outline_rounded, color: AppColors.rating, size: 30),
           ),
-        );
-      }),
+      ],
     );
   }
 }

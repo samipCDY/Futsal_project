@@ -8,6 +8,8 @@ import '../../core/services/futsal_api.dart';
 import '../../core/utils/time_format.dart';
 import '../../core/widgets/date_strip.dart';
 import '../../core/widgets/event_card.dart';
+import '../widgets/ground_place_sheet.dart';
+import '../widgets/ground_reviews.dart';
 import 'payment_screen.dart';
 
 const _daysToShow = 14;
@@ -216,6 +218,8 @@ class _GroundBookingScreenState extends State<GroundBookingScreen> {
               const SizedBox(height: 12),
             ],
           ],
+          const SizedBox(height: 24),
+          GroundReviewsSection(groundId: ground.id, groundName: ground.name),
         ],
       ),
       bottomNavigationBar: SafeArea(
@@ -315,6 +319,17 @@ class _GroundSummary extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Row(
+            children: [
+              Expanded(child: RatingLine(rating: ground.rating, count: ground.reviewCount)),
+              TextButton.icon(
+                onPressed: () => openDirections(context, ground.latitude, ground.longitude),
+                icon: const Icon(Icons.directions, size: 18),
+                label: const Text('Directions'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
           Row(
             children: [
               Icon(Icons.location_on_outlined, color: AppColors.textSecondary),

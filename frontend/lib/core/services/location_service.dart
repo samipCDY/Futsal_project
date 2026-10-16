@@ -1,28 +1,36 @@
 import 'package:geolocator/geolocator.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart' show LatLng;
 
 class LocationService {
   /// Central Kathmandu, used before (or instead of) the device's location.
   static const fallback = LatLng(27.7172, 85.3240);
 
-  static const _distance = Distance();
-
   /// The device's current position, or null when location is switched off or
   /// the user said no. Asks for permission the first time.
   static Future<LatLng?> current() async {
-    if (!await Geolocator.isLocationServiceEnabled()) return null;
-
-    var permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-    }
-    if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
-      return null;
-    }
-
+    if (!await _allowed()) return null;
     final position = await Geolocator.getCurrentPosition();
     return LatLng(position.latitude, position.longitude);
   }
 
-  static double kmBetween(LatLng a, LatLng b) => _distance.as(LengthUnit.Kilometer, a, b);
+  /// The device's position as it moves (every ~20 m), for the live blue dot.
+  /// Empty when location is off or not allowed.
+  static Stream<LatLng> watch() async* {
+    if (!await _allowed()) return;
+    yield* Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 20),
+    ).map((position) => LatLng(position.latitude, position.longitude));
+  }
+
+  static Future<bool> _allowed() async {
+    if (!await Geolocator.isLocationServiceEnabled()) return false;
+    var permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+    return permission != LocationPermission.denied && permission != LocationPermission.deniedForever;
+  }
+
+  static double kmBetween(LatLng a, LatLng b) =>
+      Geolocator.distanceBetween(a.latitude, a.longitude, b.latitude, b.longitude) / 1000;
 }

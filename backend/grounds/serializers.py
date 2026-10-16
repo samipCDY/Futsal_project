@@ -6,7 +6,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from . import notify
-from .models import Event, Ground, Maintenance
+from .models import Event, Ground, Maintenance, Review
 from .storage import signed_document_url
 
 # An admin checks these again when the owner changes them.
@@ -50,6 +50,8 @@ class _UpcomingMaintenance(serializers.Field):
 class GroundSerializer(serializers.ModelSerializer):
     # Filled in by GroundViewSet.get_queryset for the signed-in user.
     is_favourite = serializers.BooleanField(read_only=True, default=False)
+    rating = serializers.SerializerMethodField()
+    review_count = serializers.IntegerField(read_only=True, default=0)
     maintenance = _UpcomingMaintenance()
 
     class Meta:
@@ -57,8 +59,34 @@ class GroundSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'area', 'address', 'latitude', 'longitude', 'morning_price', 'day_price',
             'evening_price', 'image_url', 'badge_label', 'opens_at', 'closes_at', 'is_favourite',
-            'maintenance',
+            'rating', 'review_count', 'maintenance',
         ]
+
+    def get_rating(self, ground):
+        """Average stars to one decimal, or None before the first review."""
+        average = getattr(ground, 'rating_average', None)
+        return None if average is None else round(average, 1)
+
+
+class ReviewSerializer(serializers.ModelSerializer):
+    customer_name = serializers.SerializerMethodField()
+    customer_photo = serializers.CharField(source='customer.avatar_url', read_only=True)
+
+    class Meta:
+        model = Review
+        fields = ['id', 'rating', 'comment', 'customer_name', 'customer_photo', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def get_customer_name(self, review):
+        return review.customer.full_name or 'Futsal Finder player'
+
+    def validate_rating(self, value):
+        if not 1 <= value <= 5:
+            raise serializers.ValidationError('Pick 1 to 5 stars.')
+        return value
+
+    def validate_comment(self, value):
+        return value.strip()
 
 
 class OwnerGroundSerializer(serializers.ModelSerializer):

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_text_styles.dart';
 import '../../core/services/location_service.dart';
+import '../../customer/widgets/map_ground_pin.dart';
 
 /// Move the map until the pin sits on the ground's entrance, then confirm.
 /// Pops with the chosen [LatLng].
@@ -17,7 +17,10 @@ class LocationPickerScreen extends StatefulWidget {
 }
 
 class _LocationPickerScreenState extends State<LocationPickerScreen> {
-  final _mapController = MapController();
+  GoogleMapController? _map;
+  late LatLng _center = widget.initial ?? LocationService.fallback;
+  // Satellite helps owners spot their pitch from above.
+  MapType _mapType = MapType.hybrid;
 
   @override
   void initState() {
@@ -35,7 +38,13 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       );
       return;
     }
-    _mapController.move(location, 17);
+    _map?.animateCamera(CameraUpdate.newLatLngZoom(location, 18));
+  }
+
+  @override
+  void dispose() {
+    _map?.dispose();
+    super.dispose();
   }
 
   @override
@@ -48,19 +57,16 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          FlutterMap(
-            mapController: _mapController,
-            options: MapOptions(initialCenter: widget.initial ?? LocationService.fallback, initialZoom: 16),
-            children: [
-              TileLayer(
-                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: 'com.example.futsal_app',
-              ),
-              const RichAttributionWidget(
-                alignment: AttributionAlignment.bottomLeft,
-                attributions: [TextSourceAttribution('OpenStreetMap contributors')],
-              ),
-            ],
+          GoogleMap(
+            initialCameraPosition: CameraPosition(target: _center, zoom: 17),
+            onMapCreated: (controller) => _map = controller,
+            onCameraMove: (camera) => _center = camera.target,
+            mapType: _mapType,
+            style: _mapType == MapType.normal ? mapStyleFor(context) : null,
+            myLocationButtonEnabled: false,
+            zoomControlsEnabled: false,
+            mapToolbarEnabled: false,
+            padding: const EdgeInsets.only(top: 70, bottom: 130),
           ),
           IgnorePointer(
             child: Center(
@@ -90,6 +96,16 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   FloatingActionButton.small(
+                    heroTag: 'map-type',
+                    tooltip: _mapType == MapType.normal ? 'Satellite view' : 'Map view',
+                    onPressed: () => setState(
+                        () => _mapType = _mapType == MapType.normal ? MapType.hybrid : MapType.normal),
+                    backgroundColor: AppColors.surface,
+                    child: Icon(_mapType == MapType.normal ? Icons.satellite_alt_outlined : Icons.map_outlined,
+                        color: AppColors.primaryGreen),
+                  ),
+                  const SizedBox(height: 8),
+                  FloatingActionButton.small(
                     heroTag: 'my-location',
                     onPressed: _goToMyLocation,
                     backgroundColor: AppColors.surface,
@@ -99,7 +115,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
-                      onPressed: () => Navigator.pop(context, _mapController.camera.center),
+                      onPressed: () => Navigator.pop(context, _center),
                       icon: const Icon(Icons.check_circle_outline),
                       label: const Text('Use this location', style: TextStyle(fontWeight: FontWeight.w600)),
                       style: ElevatedButton.styleFrom(

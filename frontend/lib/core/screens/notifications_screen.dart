@@ -102,6 +102,7 @@ class _NotificationTile extends StatelessWidget {
       'maintenance' => (Icons.construction, AppColors.statusPendingText),
       'event' => (Icons.emoji_events_outlined, AppColors.accentOrange),
       'announcement' => (Icons.campaign_outlined, AppColors.darkGreen),
+      'review' => (Icons.star_outline_rounded, AppColors.rating),
       _ => (Icons.verified_outlined, AppColors.primaryGreen),
     };
     return Container(

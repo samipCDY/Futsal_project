@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart' show LatLng;
 import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_text_styles.dart';
@@ -15,7 +15,10 @@ import 'map_preview_card.dart';
 import 'ground_card.dart';
 
 class HomeTab extends StatefulWidget {
-  const HomeTab({super.key});
+  /// Switches to the Map tab.
+  final VoidCallback? onOpenMap;
+
+  const HomeTab({super.key, this.onOpenMap});
 
   @override
   State<HomeTab> createState() => _HomeTabState();
@@ -33,11 +36,13 @@ class _HomeTabState extends State<HomeTab> {
     _load();
     _locate();
     FutsalApi.favouritesChanged.addListener(_load);
+    FutsalApi.reviewsChanged.addListener(_load);
   }
 
   @override
   void dispose() {
     FutsalApi.favouritesChanged.removeListener(_load);
+    FutsalApi.reviewsChanged.removeListener(_load);
     super.dispose();
   }
 
@@ -111,7 +116,7 @@ class _HomeTabState extends State<HomeTab> {
               onChanged: (text) => setState(() => _query = text.trim()),
             ),
             const SizedBox(height: 16),
-            const MapPreviewCard(),
+            MapPreviewCard(grounds: _grounds ?? const [], myLocation: _myLocation, onMapViewTap: widget.onOpenMap),
             const SizedBox(height: 24),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,

@@ -1,6 +1,7 @@
 from datetime import datetime, time
 
 from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
 
@@ -121,6 +122,26 @@ class Favourite(models.Model):
 
     def __str__(self):
         return f'{self.customer} ♥ {self.ground}'
+
+
+class Review(models.Model):
+    """A customer's star rating (1-5) and comment for a ground they have
+    played at. One per customer per ground; writing again updates it."""
+
+    ground = models.ForeignKey(Ground, on_delete=models.CASCADE, related_name='reviews')
+    # See Ground.owner for why there's no database-level foreign key.
+    customer = models.ForeignKey(Profile, on_delete=models.DO_NOTHING, db_constraint=False, related_name='reviews')
+    rating = models.PositiveSmallIntegerField(validators=[MinValueValidator(1), MaxValueValidator(5)])
+    comment = models.TextField(max_length=1000, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-updated_at']
+        constraints = [models.UniqueConstraint(fields=['customer', 'ground'], name='review_once')]
+
+    def __str__(self):
+        return f'{self.ground} · {self.rating}★ by {self.customer}'
 
 
 class Maintenance(models.Model):

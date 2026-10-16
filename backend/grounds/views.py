@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 
 from django.db import transaction
-from django.db.models import Count, Exists, OuterRef, Q
+from django.db.models import Avg, Count, Exists, OuterRef, Q
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from rest_framework import mixins, status, viewsets
@@ -12,11 +12,22 @@ from rest_framework.response import Response
 
 from accounts.permissions import IsAdminRole, IsGroundOwner
 from bookings.models import Booking, release_unpaid_slots
-from notifications.models import Notification
+from notifications.models import Notification, notify
 
-from .models import Event, Favourite, Ground, Maintenance, slot_has_started
+from .models import Event, Favourite, Ground, Maintenance, Review, slot_has_started
 from .serializers import (AdminGroundSerializer, EventSerializer, GroundSerializer, MaintenanceSerializer,
-                          OwnerEventSerializer, OwnerGroundSerializer)
+                          OwnerEventSerializer, OwnerGroundSerializer, ReviewSerializer)
+
+
+def has_played_at(customer, ground):
+    """Whether `customer` has had a game at `ground` (a booking that wasn't
+    cancelled and whose slot has started), so they may review it."""
+    today = timezone.localdate()
+    games = (Booking.objects.filter(customer=customer, ground=ground, date__lte=today)
+             .exclude(status=Booking.Status.CANCELLED)
+             .exclude(status=Booking.Status.PENDING, payment_status=Booking.PaymentStatus.UNPAID)
+             .values_list('date', 'start_time'))
+    return any(slot_has_started(day, start) for day, start in games)
 
 
 class GroundViewSet(viewsets.ReadOnlyModelViewSet):
@@ -27,8 +38,50 @@ class GroundViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         mine = Favourite.objects.filter(ground=OuterRef('pk'), customer=self.request.user)
-        return (Ground.objects.visible().annotate(is_favourite=Exists(mine))
+        return (Ground.objects.visible()
+                .annotate(is_favourite=Exists(mine), rating_average=Avg('reviews__rating'),
+                          review_count=Count('reviews', distinct=True))
                 .prefetch_related('maintenance_periods'))
+
+    @action(detail=True, methods=['get', 'post', 'delete'])
+    def reviews(self, request, pk=None):
+        """GET: the ground's reviews (newest first), the star breakdown, the
+        signed-in user's own review and whether they may write one.
+        POST `{rating, comment}`: write or update your review; only after
+        playing there. DELETE: remove your review."""
+        ground = self.get_object()
+        mine = Review.objects.filter(ground=ground, customer=request.user).first()
+
+        if request.method == 'DELETE':
+            if mine:
+                mine.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+        if request.method == 'POST':
+            if not has_played_at(request.user, ground):
+                raise ValidationError({'detail': 'You can review a ground after you have played there.'})
+            serializer = ReviewSerializer(mine, data=request.data)
+            serializer.is_valid(raise_exception=True)
+            is_new = mine is None
+            review = serializer.save(ground=ground, customer=request.user)
+            if is_new:
+                stars = '★' * review.rating
+                notify(ground.owner_id, Notification.Kind.REVIEW, f'New {review.rating}★ review for {ground.name}',
+                       f'{request.user.full_name or "A customer"} rated it {stars}'
+                       f'{": " + review.comment[:200] if review.comment else "."}')
+            return Response(ReviewSerializer(review).data,
+                            status=status.HTTP_201_CREATED if is_new else status.HTTP_200_OK)
+
+        reviews = Review.objects.filter(ground=ground).select_related('customer')
+        counts = dict(reviews.order_by().values_list('rating').annotate(total=Count('id')))
+        return Response({
+            'rating': ground.rating_average and round(ground.rating_average, 1),
+            'review_count': ground.review_count,
+            'stars': {str(stars): counts.get(stars, 0) for stars in range(5, 0, -1)},
+            'my_review': ReviewSerializer(mine).data if mine else None,
+            'can_review': mine is not None or has_played_at(request.user, ground),
+            'reviews': ReviewSerializer(reviews[:50], many=True).data,
+        })
 
     @action(detail=False)
     def favourites(self, request):

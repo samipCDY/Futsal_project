@@ -13,6 +13,7 @@ class Notification(models.Model):
         EVENT = 'event', 'Event'
         GROUND = 'ground', 'Ground approval'
         ANNOUNCEMENT = 'announcement', 'Message from a ground or the admin'
+        REVIEW = 'review', 'Review'
 
     # See Ground.owner for why there's no database-level foreign key.
     recipient = models.ForeignKey(Profile, on_delete=models.DO_NOTHING, db_constraint=False,

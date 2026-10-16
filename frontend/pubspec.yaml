@@ -15,13 +15,12 @@ dependencies:
   cached_network_image: ^3.4.1
   http: ^1.2.2
   geolocator: ^13.0.2
-  flutter_map: ^8.3.1
-  latlong2: ^0.10.1
   supabase_flutter: ^2.17.1
   url_launcher: ^6.3.3
   image_picker: ^1.2.4
   webview_flutter: ^4.14.1
   fl_chart: ^1.2.0
+  google_maps_flutter: ^2.19.0
 
 dev_dependencies:
   flutter_test:

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_text_styles.dart';
 import '../../core/models/ground_model.dart';
+import 'ground_reviews.dart';
 
 class GroundCard extends StatelessWidget {
   final GroundModel ground;
@@ -54,6 +55,8 @@ class GroundCard extends StatelessWidget {
                     ground.name,
                     style: AppTextStyles.subheading.copyWith(fontSize: 17),
                   ),
+                  const SizedBox(height: 4),
+                  RatingLine(rating: ground.rating, count: ground.reviewCount),
                   const SizedBox(height: 6),
                   Row(
                     children: [

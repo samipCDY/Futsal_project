@@ -1,28 +1,95 @@
 import 'package:flutter/material.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/models/ground_model.dart';
+import '../../core/services/location_service.dart';
+import 'map_ground_pin.dart';
 
-/// Static map-style preview with a "Map view" button. Wire up a real map
-/// SDK (Google Maps / Mapbox) behind [onMapViewTap] later.
-class MapPreviewCard extends StatelessWidget {
+/// A small, still Google map of the grounds around the customer. Tapping it
+/// (or "Map view") opens the full Map tab.
+class MapPreviewCard extends StatefulWidget {
+  final List<GroundModel> grounds;
+  final LatLng? myLocation;
   final VoidCallback? onMapViewTap;
 
-  const MapPreviewCard({super.key, this.onMapViewTap});
+  const MapPreviewCard({super.key, this.grounds = const [], this.myLocation, this.onMapViewTap});
+
+  @override
+  State<MapPreviewCard> createState() => _MapPreviewCardState();
+}
+
+class _MapPreviewCardState extends State<MapPreviewCard> {
+  Map<PinKind, BitmapDescriptor> _pins = {};
+  String _pinsKey = '';
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _loadPins();
+  }
+
+  Future<void> _loadPins() async {
+    final ratio = MediaQuery.devicePixelRatioOf(context);
+    final key = '$ratio-${Theme.of(context).brightness}';
+    if (key == _pinsKey) return;
+    _pinsKey = key;
+    final pins = {
+      PinKind.open: await GroundPins.icon(PinKind.open, ratio),
+      PinKind.closed: await GroundPins.icon(PinKind.closed, ratio),
+    };
+    if (mounted) setState(() => _pins = pins);
+  }
 
   @override
   Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final center = widget.myLocation ?? LocationService.fallback;
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
-      child: Container(
+      child: SizedBox(
         height: 170,
-        decoration: BoxDecoration(color: AppColors.mapPreviewBg),
         child: Stack(
           children: [
-            CustomPaint(size: Size.infinite, painter: _MapGridPainter()),
+            Positioned.fill(
+              child: ColoredBox(
+                color: AppColors.mapPreviewBg,
+                child: GoogleMap(
+                  // A new map when the location arrives, so it centres there.
+                  key: ValueKey(center),
+                  initialCameraPosition: CameraPosition(target: center, zoom: 12.5),
+                  liteModeEnabled: true,
+                  style: mapStyleFor(context),
+                  markers: _pins.isEmpty
+                      ? const {}
+                      : {
+                          for (final ground in widget.grounds)
+                            Marker(
+                              markerId: MarkerId(ground.id),
+                              position: ground.location,
+                              icon: _pins[ground.closureOn(now) == null ? PinKind.open : PinKind.closed]!,
+                            ),
+                        },
+                  myLocationEnabled: widget.myLocation != null,
+                  myLocationButtonEnabled: false,
+                  zoomControlsEnabled: false,
+                  mapToolbarEnabled: false,
+                  compassEnabled: false,
+                  scrollGesturesEnabled: false,
+                  zoomGesturesEnabled: false,
+                  rotateGesturesEnabled: false,
+                  tiltGesturesEnabled: false,
+                ),
+              ),
+            ),
+            // Catches taps so they open the Map tab instead of Google Maps.
+            Positioned.fill(
+              child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: widget.onMapViewTap),
+            ),
             Positioned(
-              left: 16,
-              bottom: 16,
+              right: 12,
+              bottom: 12,
               child: ElevatedButton.icon(
-                onPressed: onMapViewTap,
+                onPressed: widget.onMapViewTap,
                 icon: Icon(Icons.map_outlined, size: 18, color: AppColors.textPrimary),
                 label: Text('Map view', style: TextStyle(color: AppColors.textPrimary)),
                 style: ElevatedButton.styleFrom(
@@ -38,34 +105,4 @@ class MapPreviewCard extends StatelessWidget {
       ),
     );
   }
-}
-
-class _MapGridPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final linePaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.5)
-      ..strokeWidth = 1;
-    const step = 24.0;
-    for (double x = 0; x < size.width; x += step) {
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), linePaint);
-    }
-    for (double y = 0; y < size.height; y += step) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), linePaint);
-    }
-
-    final pinPaint = Paint()..color = AppColors.primaryGreen;
-    final pins = [
-      Offset(size.width * 0.3, size.height * 0.4),
-      Offset(size.width * 0.55, size.height * 0.25),
-      Offset(size.width * 0.7, size.height * 0.6),
-      Offset(size.width * 0.4, size.height * 0.75),
-    ];
-    for (final p in pins) {
-      canvas.drawCircle(p, 5, pinPaint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

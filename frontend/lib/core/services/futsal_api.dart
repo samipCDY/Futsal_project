@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import '../models/booking_model.dart';
 import '../models/event_model.dart';
 import '../models/ground_model.dart';
+import '../models/review_model.dart';
 import '../utils/time_format.dart';
 import 'api_client.dart';
 
@@ -89,6 +90,26 @@ class FutsalApi {
     final data = await ApiClient.post('/bookings/$bookingId/cancel/', {if (reason != null) 'reason': reason});
     bookingsChanged.value++;
     return BookingModel.fromJson(data as Map<String, dynamic>);
+  }
+
+  /// Bumped whenever the user writes or removes a review, so ratings reload.
+  static final reviewsChanged = ValueNotifier<int>(0);
+
+  static Future<GroundReviews> fetchReviews(String groundId) async {
+    final data = await ApiClient.get('/grounds/$groundId/reviews/');
+    return GroundReviews.fromJson(data as Map<String, dynamic>);
+  }
+
+  /// Writes the user's review, or updates it if they already wrote one.
+  /// Only works after they've played at the ground.
+  static Future<void> saveReview(String groundId, {required int rating, String comment = ''}) async {
+    await ApiClient.post('/grounds/$groundId/reviews/', {'rating': rating, 'comment': comment});
+    reviewsChanged.value++;
+  }
+
+  static Future<void> deleteReview(String groundId) async {
+    await ApiClient.delete('/grounds/$groundId/reviews/');
+    reviewsChanged.value++;
   }
 
   /// Published events: coming ones first, then recently ended ones.

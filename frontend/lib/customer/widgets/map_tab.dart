@@ -1,41 +1,82 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_text_styles.dart';
 import '../../core/models/ground_model.dart';
 import '../../core/services/api_exception.dart';
 import '../../core/services/futsal_api.dart';
 import '../../core/services/location_service.dart';
+import '../../core/utils/money.dart';
 import '../screens/ground_booking_screen.dart';
-import 'ground_search_bar.dart';
-import 'map_ground_pin.dart';
+import 'ground_place_sheet.dart';
+import 'ground_reviews.dart';
 import 'map_controls.dart';
+import 'map_ground_pin.dart';
 
-/// Yango/inDrive-style location picker: a pin fixed at the screen centre
-/// while the map pans underneath it. Confirming reads whatever coordinate
-/// is under the pin and sorts grounds by real distance from that point.
+/// Google map of every ground, each a drop-shaped pin (orange when closed
+/// for maintenance today). Tapping a pin opens its details like a place in
+/// Google Maps; the search bar finds grounds by name or area.
 class MapTab extends StatefulWidget {
   const MapTab({super.key});
 
   @override
-  State<MapTab> createState() => _MapTabState();
+  State<MapTab> createState() => MapTabState();
 }
 
-class _MapTabState extends State<MapTab> {
-  final _mapController = MapController();
-  LatLng? _myLocation;
-  bool _hasCenteredOnMyLocation = false;
+class MapTabState extends State<MapTab> {
+  static const _sheetSize = 0.45;
 
-  LatLng? _pinnedCenter;
-  List<GroundModel>? _nearbyGrounds;
+  GoogleMapController? _map;
   List<GroundModel>? _grounds;
+  String? _selectedId;
+  LatLng? _myLocation;
+  bool _locationAllowed = false;
+  StreamSubscription<LatLng>? _locationUpdates;
+  MapType _mapType = MapType.normal;
+
+  final _search = TextEditingController();
+  final _searchFocus = FocusNode();
+  String _query = '';
+
+  Map<PinKind, BitmapDescriptor> _pins = {};
+  String _pinsKey = '';
 
   @override
   void initState() {
     super.initState();
-    _initLocation();
     _loadGrounds();
+    _startLocation();
+    FutsalApi.favouritesChanged.addListener(_loadGrounds);
+    FutsalApi.reviewsChanged.addListener(_loadGrounds);
+    _searchFocus.addListener(() => setState(() {}));
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _loadPins(); // again when the theme (pin colours) or screen density changes
+  }
+
+  @override
+  void dispose() {
+    FutsalApi.favouritesChanged.removeListener(_loadGrounds);
+    FutsalApi.reviewsChanged.removeListener(_loadGrounds);
+    _locationUpdates?.cancel();
+    _search.dispose();
+    _searchFocus.dispose();
+    _map?.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadPins() async {
+    final ratio = MediaQuery.devicePixelRatioOf(context);
+    final key = '$ratio-${Theme.of(context).brightness}';
+    if (key == _pinsKey) return;
+    _pinsKey = key;
+    final pins = {for (final kind in PinKind.values) kind: await GroundPins.icon(kind, ratio)};
+    if (mounted) setState(() => _pins = pins);
   }
 
   Future<void> _loadGrounds() async {
@@ -47,74 +88,135 @@ class _MapTabState extends State<MapTab> {
     }
   }
 
-  Future<void> _initLocation() async {
+  Future<void> _startLocation() async {
     final location = await LocationService.current();
     if (!mounted || location == null) return;
-    setState(() => _myLocation = location);
-    if (!_hasCenteredOnMyLocation) {
-      _hasCenteredOnMyLocation = true;
-      _mapController.move(location, _mapController.camera.zoom);
-    }
-  }
-
-  Future<void> _goToMyLocation() async {
-    if (_myLocation == null) {
-      await _initLocation();
-    }
-    if (_myLocation == null) return;
-    _mapController.move(_myLocation!, _mapController.camera.zoom);
-  }
-
-  void _zoomBy(double delta) {
-    _mapController.move(_mapController.camera.center, _mapController.camera.zoom + delta);
-  }
-
-  Future<void> _confirmLocation() async {
-    if (_grounds == null) await _loadGrounds();
-    if (!mounted || _grounds == null) return;
-    final center = _mapController.camera.center;
-    final sorted = [..._grounds!]..sort((a, b) =>
-        LocationService.kmBetween(center, a.location).compareTo(LocationService.kmBetween(center, b.location)));
+    final firstFix = _myLocation == null;
     setState(() {
-      _pinnedCenter = center;
-      _nearbyGrounds = sorted;
+      _myLocation = location;
+      _locationAllowed = true;
+    });
+    if (firstFix && _selectedId == null) {
+      _map?.animateCamera(CameraUpdate.newLatLngZoom(location, 14));
+    }
+    // Keep distances right as the customer moves; the blue dot moves by itself.
+    _locationUpdates ??= LocationService.watch().listen((location) {
+      if (mounted) setState(() => _myLocation = location);
     });
   }
 
-  void _changeLocation() => setState(() => _nearbyGrounds = null);
+  Future<void> _goToMyLocation() async {
+    if (_myLocation == null) await _startLocation();
+    final location = _myLocation;
+    if (location == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Turn on location and allow it for Futsal Finder to see where you are.')),
+        );
+      }
+      return;
+    }
+    _map?.animateCamera(CameraUpdate.newLatLngZoom(location, 15));
+  }
+
+  /// Opens [ground]'s details and moves the map so its pin sits above them.
+  /// Other tabs call this too, e.g. Home's map preview.
+  void showGround(GroundModel ground) {
+    _searchFocus.unfocus();
+    setState(() => _selectedId = ground.id);
+    _map?.animateCamera(CameraUpdate.newLatLngZoom(ground.location, 16));
+  }
+
+  void _closeGround() => setState(() => _selectedId = null);
+
+  GroundModel? get _selected {
+    for (final ground in _grounds ?? const <GroundModel>[]) {
+      if (ground.id == _selectedId) return ground;
+    }
+    return null;
+  }
+
+  double? _distanceTo(GroundModel ground) =>
+      _myLocation == null ? null : LocationService.kmBetween(_myLocation!, ground.location);
+
+  List<GroundModel> get _nearestFirst {
+    final grounds = [...?_grounds];
+    final from = _myLocation ?? LocationService.fallback;
+    grounds.sort((a, b) => LocationService.kmBetween(from, a.location).compareTo(LocationService.kmBetween(from, b.location)));
+    return grounds;
+  }
+
+  List<GroundModel> get _searchResults {
+    final words = _query.toLowerCase().split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+    if (words.isEmpty) return const [];
+    return _nearestFirst
+        .where((g) => words.every('${g.name} ${g.area} ${g.address}'.toLowerCase().contains))
+        .take(6)
+        .toList();
+  }
+
+  Set<Marker> _markers() {
+    if (_pins.isEmpty) return const {};
+    final now = DateTime.now();
+    return {
+      for (final ground in _grounds ?? const <GroundModel>[])
+        Marker(
+          markerId: MarkerId(ground.id),
+          position: ground.location,
+          icon: _pins[ground.id == _selectedId
+              ? PinKind.selected
+              : ground.closureOn(now) != null
+                  ? PinKind.closed
+                  : PinKind.open]!,
+          zIndexInt: ground.id == _selectedId ? 1 : 0,
+          consumeTapEvents: true,
+          onTap: () => showGround(ground),
+        ),
+    };
+  }
+
+  Future<void> _toggleFavourite(GroundModel ground) async {
+    try {
+      await FutsalApi.setFavourite(ground.id, !ground.isFavourite);
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  void _book(GroundModel ground) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => GroundBookingScreen(ground: ground)));
+  }
 
   @override
   Widget build(BuildContext context) {
+    final selected = _selected;
+    final screenHeight = MediaQuery.sizeOf(context).height;
+    final showResults = _searchFocus.hasFocus && _query.isNotEmpty;
+
     return Stack(
       fit: StackFit.expand,
       children: [
-        FlutterMap(
-          mapController: _mapController,
-          options: MapOptions(
-            initialCenter: LocationService.fallback,
-            initialZoom: 15,
-            onPositionChanged: (camera, hasGesture) {
-              if (hasGesture && _nearbyGrounds != null) _changeLocation();
-            },
+        GoogleMap(
+          initialCameraPosition: CameraPosition(target: _myLocation ?? LocationService.fallback, zoom: 13),
+          onMapCreated: (controller) => _map = controller,
+          style: mapStyleFor(context),
+          mapType: _mapType,
+          markers: _markers(),
+          myLocationEnabled: _locationAllowed,
+          myLocationButtonEnabled: false,
+          zoomControlsEnabled: false,
+          mapToolbarEnabled: false,
+          compassEnabled: true,
+          // Keep Google's logo and the compass clear of our panels.
+          padding: EdgeInsets.only(
+            top: MediaQuery.paddingOf(context).top + 70,
+            bottom: selected != null ? screenHeight * _sheetSize : 140,
           ),
-          children: [
-            TileLayer(
-              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-              userAgentPackageName: 'com.example.futsal_app',
-            ),
-            if (_myLocation != null)
-              MarkerLayer(
-                markers: [
-                  Marker(point: _myLocation!, width: 22, height: 22, child: const MyLocationDot()),
-                ],
-              ),
-            const RichAttributionWidget(
-              alignment: AttributionAlignment.bottomLeft,
-              attributions: [TextSourceAttribution('OpenStreetMap contributors')],
-            ),
-          ],
+          onTap: (_) {
+            _searchFocus.unfocus();
+            if (_selectedId != null) _closeGround();
+          },
         ),
-        const IgnorePointer(child: Center(child: _CenterPin())),
         Positioned(
           top: 0,
           left: 0,
@@ -123,207 +225,239 @@ class _MapTabState extends State<MapTab> {
             bottom: false,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              child: GroundSearchBar(hintText: 'Search this area...', onFilterTap: () {}),
-            ),
-          ),
-        ),
-        Positioned(
-          left: 16,
-          top: 120,
-          child: Column(
-            children: [
-              MapZoomControls(
-                onZoomIn: () => _zoomBy(1),
-                onZoomOut: () => _zoomBy(-1),
-              ),
-              const SizedBox(height: 20),
-              const MapControlButton(icon: Icons.layers_outlined),
-            ],
-          ),
-        ),
-        Positioned(
-          bottom: 0,
-          left: 0,
-          right: 0,
-          child: SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
               child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  MapControlButton(icon: Icons.my_location, onTap: _goToMyLocation),
-                  const SizedBox(height: 12),
-                  if (_nearbyGrounds == null)
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: _confirmLocation,
-                        icon: const Icon(Icons.check_circle_outline, size: 18),
-                        label: const Text('Confirm this location', style: TextStyle(fontWeight: FontWeight.w600)),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primaryGreen,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                      ),
-                    )
-                  else
-                    _NearbyGroundsPanel(
-                      grounds: _nearbyGrounds!,
-                      pinnedCenter: _pinnedCenter!,
-                      onChangeLocation: _changeLocation,
-                      onBookNow: (ground) => Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => GroundBookingScreen(ground: ground)),
-                      ),
-                    ),
+                  _SearchField(
+                    controller: _search,
+                    focusNode: _searchFocus,
+                    onChanged: (text) => setState(() => _query = text.trim()),
+                    onClear: () {
+                      _search.clear();
+                      setState(() => _query = '');
+                    },
+                  ),
+                  if (showResults) _SearchResults(results: _searchResults, distanceTo: _distanceTo, onTap: showGround),
                 ],
               ),
             ),
           ),
         ),
+        if (!showResults)
+          Positioned(
+            right: 16,
+            top: MediaQuery.paddingOf(context).top + 80,
+            child: Column(
+              children: [
+                MapControlButton(
+                  icon: _mapType == MapType.normal ? Icons.satellite_alt_outlined : Icons.map_outlined,
+                  tooltip: _mapType == MapType.normal ? 'Satellite view' : 'Map view',
+                  onTap: () => setState(
+                      () => _mapType = _mapType == MapType.normal ? MapType.hybrid : MapType.normal),
+                ),
+                const SizedBox(height: 10),
+                MapControlButton(icon: Icons.my_location, tooltip: 'My location', onTap: _goToMyLocation),
+              ],
+            ),
+          ),
+        if (selected == null)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 12,
+            child: _NearbyStrip(
+              grounds: _nearestFirst,
+              loading: _grounds == null,
+              distanceTo: _distanceTo,
+              onTap: showGround,
+            ),
+          )
+        else
+          DraggableScrollableSheet(
+            key: ValueKey(selected.id),
+            initialChildSize: _sheetSize,
+            minChildSize: 0.25,
+            maxChildSize: 0.95,
+            snap: true,
+            snapSizes: const [_sheetSize],
+            builder: (context, scrollController) => GroundPlaceSheet(
+              ground: selected,
+              distanceKm: _distanceTo(selected),
+              scrollController: scrollController,
+              onClose: _closeGround,
+              onBook: () => _book(selected),
+              onFavourite: () => _toggleFavourite(selected),
+            ),
+          ),
       ],
     );
   }
 }
 
-class _CenterPin extends StatelessWidget {
-  const _CenterPin();
+class _SearchField extends StatelessWidget {
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onClear;
 
-  @override
-  Widget build(BuildContext context) {
-    return Transform.translate(
-      offset: const Offset(0, -22),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.location_on, size: 44, color: AppColors.darkGreen),
-          Container(
-            width: 8,
-            height: 3,
-            decoration: BoxDecoration(
-              color: const Color(0x40000000),
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _NearbyGroundsPanel extends StatelessWidget {
-  final List<GroundModel> grounds;
-  final LatLng pinnedCenter;
-  final VoidCallback onChangeLocation;
-  final ValueChanged<GroundModel> onBookNow;
-
-  const _NearbyGroundsPanel({
-    required this.grounds,
-    required this.pinnedCenter,
-    required this.onChangeLocation,
-    required this.onBookNow,
+  const _SearchField({
+    required this.controller,
+    required this.focusNode,
+    required this.onChanged,
+    required this.onClear,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      constraints: const BoxConstraints(maxHeight: 280),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: const [BoxShadow(color: Color(0x22000000), blurRadius: 16, offset: Offset(0, 6))],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 8, 8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '${grounds.length} grounds near this spot',
-                    style: AppTextStyles.subheading.copyWith(fontSize: 15),
-                  ),
+    return Material(
+      color: AppColors.surface,
+      elevation: 4,
+      shadowColor: Colors.black26,
+      borderRadius: BorderRadius.circular(28),
+      child: TextField(
+        controller: controller,
+        focusNode: focusNode,
+        onChanged: onChanged,
+        textInputAction: TextInputAction.search,
+        style: AppTextStyles.body,
+        decoration: InputDecoration(
+          hintText: 'Search grounds or areas',
+          hintStyle: AppTextStyles.body.copyWith(color: AppColors.textSecondary),
+          prefixIcon: Icon(Icons.search, color: AppColors.textSecondary),
+          suffixIcon: controller.text.isEmpty
+              ? null
+              : IconButton(
+                  tooltip: 'Clear',
+                  onPressed: onClear,
+                  icon: Icon(Icons.close, color: AppColors.textSecondary),
                 ),
-                TextButton(onPressed: onChangeLocation, child: const Text('Change location')),
-              ],
-            ),
-          ),
-          Divider(height: 1, color: AppColors.divider),
-          Flexible(
-            child: ListView.separated(
-              shrinkWrap: true,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              itemCount: grounds.length,
-              separatorBuilder: (_, __) => Divider(height: 1, color: AppColors.divider),
-              itemBuilder: (context, index) {
-                final ground = grounds[index];
-                final km = LocationService.kmBetween(pinnedCenter, ground.location);
-                return _NearbyGroundTile(ground: ground, distanceKm: km, onBookNow: () => onBookNow(ground));
-              },
-            ),
-          ),
-        ],
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(vertical: 14),
+        ),
       ),
     );
   }
 }
 
-class _NearbyGroundTile extends StatelessWidget {
-  final GroundModel ground;
-  final double distanceKm;
-  final VoidCallback? onBookNow;
+class _SearchResults extends StatelessWidget {
+  final List<GroundModel> results;
+  final double? Function(GroundModel) distanceTo;
+  final ValueChanged<GroundModel> onTap;
 
-  const _NearbyGroundTile({required this.ground, required this.distanceKm, this.onBookNow});
+  const _SearchResults({required this.results, required this.distanceTo, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [AppColors.primaryGreen.withValues(alpha: 0.85), AppColors.darkGreen],
-              ),
-            ),
-            child: const Icon(Icons.sports_soccer, color: Colors.white70, size: 20),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const [BoxShadow(color: Color(0x22000000), blurRadius: 12, offset: Offset(0, 4))],
+      ),
+      child: results.isEmpty
+          ? Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text('No grounds match that.', style: AppTextStyles.body),
+            )
+          : Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Text(ground.name, style: AppTextStyles.subheading.copyWith(fontSize: 14)),
-                const SizedBox(height: 2),
-                Text('${ground.area} · ${distanceKm.toStringAsFixed(1)} km', style: AppTextStyles.caption),
+                for (final ground in results)
+                  ListTile(
+                    onTap: () => onTap(ground),
+                    leading: Icon(Icons.location_on, color: AppColors.primaryGreen),
+                    title: Text(ground.name, style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600)),
+                    subtitle: Text(
+                      [ground.area, if (distanceTo(ground) != null) '${distanceTo(ground)!.toStringAsFixed(1)} km']
+                          .join(' · '),
+                      style: AppTextStyles.caption,
+                    ),
+                  ),
               ],
             ),
-          ),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text('from Rs ${ground.priceFrom.toStringAsFixed(0)}/hr', style: AppTextStyles.price.copyWith(fontSize: 13)),
-              TextButton(
-                style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 28)),
-                onPressed: onBookNow,
-                child: const Text('Book now', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+    );
+  }
+}
+
+/// Grounds nearest first, as cards you swipe through at the bottom of the map.
+class _NearbyStrip extends StatelessWidget {
+  final List<GroundModel> grounds;
+  final bool loading;
+  final double? Function(GroundModel) distanceTo;
+  final ValueChanged<GroundModel> onTap;
+
+  const _NearbyStrip({required this.grounds, required this.loading, required this.distanceTo, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading || grounds.isEmpty) {
+      return Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(20)),
+          child: Text(loading ? 'Finding grounds...' : 'No grounds listed yet.', style: AppTextStyles.body),
+        ),
+      );
+    }
+    final now = DateTime.now();
+    return SizedBox(
+      height: 112,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: grounds.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 10),
+        itemBuilder: (context, index) {
+          final ground = grounds[index];
+          final (isOpen, _) = ground.openStatus(now);
+          final km = distanceTo(ground);
+          return Material(
+            color: AppColors.surface,
+            elevation: 4,
+            shadowColor: Colors.black26,
+            borderRadius: BorderRadius.circular(16),
+            child: InkWell(
+              onTap: () => onTap(ground),
+              borderRadius: BorderRadius.circular(16),
+              child: Container(
+                width: 250,
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(ground.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.subheading.copyWith(fontSize: 15)),
+                    const SizedBox(height: 2),
+                    RatingLine(rating: ground.rating, count: ground.reviewCount),
+                    const Spacer(),
+                    Row(
+                      children: [
+                        Text(
+                          isOpen ? 'Open' : 'Closed',
+                          style: AppTextStyles.caption.copyWith(
+                            color: isOpen ? AppColors.statusConfirmedText : AppColors.dangerText,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        Expanded(
+                          child: Text(
+                            [' · ${ground.area}', if (km != null) '${km.toStringAsFixed(1)} km'].join(' · '),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTextStyles.caption,
+                          ),
+                        ),
+                        Text('${formatRupees(ground.priceFrom)}+', style: AppTextStyles.price.copyWith(fontSize: 13)),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ],
-          ),
-        ],
+            ),
+          );
+        },
       ),
     );
   }

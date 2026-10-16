@@ -8,6 +8,8 @@ class BookingModel {
   final String bookingRef;
   final String groundId;
   final String groundName;
+  final double? groundLatitude;
+  final double? groundLongitude;
   final BookingStatus status;
   final DateTime date;
   final String startTime; // "18:00:00"
@@ -35,6 +37,8 @@ class BookingModel {
     required this.bookingRef,
     required this.groundId,
     required this.groundName,
+    this.groundLatitude,
+    this.groundLongitude,
     required this.status,
     required this.date,
     required this.startTime,
@@ -59,6 +63,8 @@ class BookingModel {
         bookingRef: json['booking_ref'] as String,
         groundId: json['ground'].toString(),
         groundName: json['ground_name'] as String,
+        groundLatitude: double.tryParse('${json['ground_latitude']}'),
+        groundLongitude: double.tryParse('${json['ground_longitude']}'),
         status: BookingStatus.values.byName(json['status'] as String),
         date: DateTime.parse(json['date'] as String),
         startTime: json['start_time'] as String,

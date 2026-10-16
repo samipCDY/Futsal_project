@@ -26,10 +26,11 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
     NavItem(icon: Icons.person_outline, label: 'Profile'),
   ];
 
+  static const _mapTabIndex = 1;
   static const _bookingsTabIndex = 2;
 
   late final _tabs = [
-    const HomeTab(),
+    HomeTab(onOpenMap: () => setState(() => _tabIndex = _mapTabIndex)),
     const MapTab(),
     const BookingsTab(),
     ProfileTab(
