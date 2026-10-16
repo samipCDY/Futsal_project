@@ -31,6 +31,7 @@ All endpoints need a Supabase access token.
 | POST | `/api/bookings/<id>/pay/` | customer | restart an online payment |
 | POST | `/api/bookings/<id>/verify-payment/` | customer | confirm the payment with eSewa/Khalti |
 | POST | `/api/bookings/<id>/cancel/` | customer or owner | cancel, with refund |
+| POST | `/api/bookings/<id>/reschedule/` | customer | move to `{date, start_time}` at the same ground (paid online: same price only) |
 | GET | `/api/notifications/` | anyone | latest 50 and the unread count |
 | POST | `/api/notifications/read/` | anyone | mark all as read |
 | CRUD | `/api/owner/grounds/` | owner | own grounds |

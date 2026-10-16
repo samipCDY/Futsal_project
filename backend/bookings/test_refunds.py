@@ -85,8 +85,28 @@ class RefundTests(ProfilesTableMixin, TestCase):
         customer_notice = Notification.objects.get(recipient=self.customer)
         self.assertEqual(customer_notice.title, 'Booking confirmed')
         self.assertIn('9:00 AM', customer_notice.body)
-        self.assertIn('Free cancellation until', customer_notice.body)
         self.assertEqual(Notification.objects.get(recipient=self.owner).title, 'New booking')
+
+    def test_paid_booking_notice_explains_the_refund_rules(self):
+        booking = Booking.objects.create(ground=self.ground, customer=self.customer, date=self.tomorrow,
+                                         start_time=time(9), price=1500, payment_method='esewa',
+                                         status=Booking.Status.PENDING)
+        booking.mark_paid('E1')
+        body = Notification.objects.get(recipient=self.customer).body
+        self.assertIn('paid with eSewa. Free cancellation until', body)
+        self.assertIn('50% refund', body)
+
+    def test_owner_reason_without_full_stop_reads_as_a_sentence(self):
+        booking_id = self.book()
+        self.cancel(booking_id, self.owner, reason='Sorry, turf repair')
+        body = Notification.objects.get(recipient=self.customer, kind='cancellation').body
+        self.assertIn('Sorry, turf repair. Your booking is cancelled.', body)
+
+    def test_cash_booking_notice_promises_no_refund(self):
+        self.book(start='09:00', paid=False)
+        body = Notification.objects.get(recipient=self.customer).body
+        self.assertIn('pay at the ground. You can cancel any time before the game.', body)
+        self.assertNotIn('refund', body)
 
     def test_cash_bookings_have_nothing_to_refund(self):
         booking_id = self.book(booked_hours_ago=5, paid=False)

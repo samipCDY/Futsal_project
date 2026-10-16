@@ -84,6 +84,18 @@ class FutsalApi {
     return data.map((json) => BookingModel.fromJson(json as Map<String, dynamic>)).toList();
   }
 
+  /// Moves an upcoming booking to another hour at the same ground. Throws
+  /// an ApiException with statusCode 409 if someone just took that hour.
+  static Future<BookingModel> rescheduleBooking(String bookingId,
+      {required DateTime day, required String startTime}) async {
+    final data = await ApiClient.post('/bookings/$bookingId/reschedule/', {
+      'date': formatDateApi(day),
+      'start_time': startTime,
+    });
+    bookingsChanged.value++;
+    return BookingModel.fromJson(data as Map<String, dynamic>);
+  }
+
   /// Returns the cancelled booking, with how much is refunded. [reason] is
   /// only used when the ground's owner cancels; the customer sees it.
   static Future<BookingModel> cancelBooking(String bookingId, {String? reason}) async {

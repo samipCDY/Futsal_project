@@ -151,11 +151,15 @@ class ProfileTab extends StatelessWidget {
                 _ProfileTile(
                   icon: Icons.notifications_none,
                   label: 'Notifications',
-                  trailing: Switch(
-                    value: preferences.notificationsEnabled,
+                  trailing: SizedBox(
+                    height: 24,
+                    child: Switch(
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      value: preferences.notificationsEnabled,
                     activeThumbColor: AppColors.primaryGreen,
-                    onChanged: (enabled) =>
-                        _savePreference(context, (p) => p.copyWith(notificationsEnabled: enabled)),
+                      onChanged: (enabled) =>
+                          _savePreference(context, (p) => p.copyWith(notificationsEnabled: enabled)),
+                    ),
                   ),
                 ),
                 const _TileDivider(),

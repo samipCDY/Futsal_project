@@ -143,7 +143,13 @@ class _MapTabState extends State<MapTab> with SingleTickerProviderStateMixin {
     _flyTo(ground.location, zoom, coveredBottom: MediaQuery.sizeOf(context).height * _sheetSize);
   }
 
-  void _closeGround() => setState(() => _selectedId = null);
+  /// Closes the details and brings the ground back to the middle (it was
+  /// lifted above the sheet).
+  void _closeGround() {
+    final ground = _selected;
+    setState(() => _selectedId = null);
+    if (ground != null) _flyTo(ground.location, _map.camera.zoom);
+  }
 
   GroundModel? get _selected {
     for (final ground in _grounds ?? const <GroundModel>[]) {
@@ -223,7 +229,6 @@ class _MapTabState extends State<MapTab> with SingleTickerProviderStateMixin {
           children: [
             osmTiles(context),
             MarkerLayer(markers: _markers()),
-            osmAttribution,
           ],
         ),
         Positioned(
@@ -263,7 +268,23 @@ class _MapTabState extends State<MapTab> with SingleTickerProviderStateMixin {
             child: MapControlButton(icon: Icons.my_location, tooltip: 'My location', onTap: _goToMyLocation),
           ),
         ],
+        // OpenStreetMap's licence asks for this credit to stay visible.
         if (selected == null)
+          Positioned(
+            right: 12,
+            bottom: 130,
+            child: IgnorePointer(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppColors.surface.withValues(alpha: 0.8),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text('© OpenStreetMap', style: AppTextStyles.caption.copyWith(fontSize: 10)),
+              ),
+            ),
+          ),
+        if (selected == null && !_searchFocus.hasFocus)
           Positioned(
             left: 0,
             right: 0,
@@ -275,7 +296,7 @@ class _MapTabState extends State<MapTab> with SingleTickerProviderStateMixin {
               onTap: _showGround,
             ),
           )
-        else
+        else if (selected != null)
           DraggableScrollableSheet(
             key: ValueKey(selected.id),
             initialChildSize: _sheetSize,

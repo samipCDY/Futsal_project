@@ -153,7 +153,7 @@ class _HomeTabState extends State<HomeTab> {
             ),
             const SizedBox(height: 16),
             GroundSearchBar(
-              hintText: 'Search by ground name or area...',
+              hintText: 'Search grounds or areas',
               onChanged: (text) => setState(() => _query = text.trim()),
               onFilterTap: _openFilters,
               activeFilters: _filters.activeCount,

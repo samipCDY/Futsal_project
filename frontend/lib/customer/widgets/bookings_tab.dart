@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../screens/reschedule_screen.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_text_styles.dart';
 import '../../core/models/booking_model.dart';
@@ -172,9 +173,8 @@ class _BookingsTabState extends State<BookingsTab> {
     final bookings = (_bookings ?? []).where((b) => b.isUpcoming == upcoming).toList();
     // The API sends newest first; upcoming games read better soonest first.
     if (upcoming) {
-      bookings.sort((a, b) => a.date.compareTo(b.date) != 0
-          ? a.date.compareTo(b.date)
-          : a.startTime.compareTo(b.startTime));
+      bookings.sort(
+          (a, b) => a.date.compareTo(b.date) != 0 ? a.date.compareTo(b.date) : a.startTime.compareTo(b.startTime));
     }
 
     return SafeArea(
@@ -231,6 +231,12 @@ class _BookingsTabState extends State<BookingsTab> {
                         booking: booking,
                         onCancel: booking.isUpcoming ? () => _cancel(booking) : null,
                         onPay: booking.isAwaitingPayment ? () => _pay(booking) : null,
+                        onReschedule: booking.status == BookingStatus.confirmed
+                            ? () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (_) => RescheduleScreen(booking: booking)),
+                                )
+                            : null,
                       ),
                       const SizedBox(height: 16),
                     ],

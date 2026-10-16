@@ -34,6 +34,13 @@ def _rupees(amount):
     return f'Rs {amount:,.0f}'
 
 
+def _sentence(text):
+    """Ends `text` with a full stop if it has none, so another sentence can
+    follow it, e.g. "Turf repair" becomes "Turf repair."."""
+    text = text.strip()
+    return text if not text or text[-1] in '.!?' else f'{text}.'
+
+
 def _clock(value):
     """6:00 PM"""
     return value.strftime('%I:%M %p').lstrip('0')
@@ -177,7 +184,8 @@ class Booking(models.Model):
 
         if by == self.CancelledBy.OWNER:
             notify(self.customer_id, kind, title or 'Your booking was cancelled by the ground',
-                   f'{slot}. {self.cancel_reason or "The ground had to cancel."} Your booking is cancelled. {refund}')
+                   f'{slot}. {_sentence(self.cancel_reason) or "The ground had to cancel."} '
+                   f'Your booking is cancelled. {refund}')
         elif self.is_online and not self.is_paid:
             # An abandoned online payment: only the customer needs to know.
             notify(self.customer_id, Notification.Kind.CANCELLATION, 'Booking cancelled', f'{slot}. {refund}')
@@ -191,9 +199,11 @@ class Booking(models.Model):
         slot = self._slot_label()
         free_until = _clock(timezone.localtime(self.free_cancel_until))
         paid = (f'paid with {self.get_payment_method_display()}' if self.is_paid else 'pay at the ground')
+        # Refunds only apply to online payments; cash is paid at the ground.
+        cancelling = (f'Free cancellation until {free_until}, after that {LATE_REFUND_PERCENT}% refund.'
+                      if self.is_paid else 'You can cancel any time before the game.')
         notify(self.customer_id, Notification.Kind.BOOKING, 'Booking confirmed',
-               f'{slot} · {_rupees(self.price)}, {paid}. Free cancellation until {free_until}, '
-               f'after that {LATE_REFUND_PERCENT}% refund.')
+               f'{slot} · {_rupees(self.price)}, {paid}. {cancelling}')
         notify(self.ground.owner_id, Notification.Kind.BOOKING, 'New booking',
                f'{self.customer.full_name or "A customer"} booked {slot} · {_rupees(self.price)} ({paid}).')
 
@@ -239,6 +249,21 @@ class Booking(models.Model):
                    f'your {self.get_payment_method_display()} account.')
             return
         self.save(update_fields=fields)
+
+    def move_to(self, day, start, price):
+        """Moves the booking to another hour at the same ground (the caller
+        has checked the new hour) and tells the customer and the owner."""
+        old_slot = self._slot_label()
+        old_price = self.price
+        self.date, self.start_time, self.price = day, start, price
+        self.save(update_fields=['date', 'start_time', 'price'])
+        new_slot = self._slot_label()
+        price_note = (f' New price: {_rupees(price)}, pay at the ground.'
+                      if price != old_price and not self.is_paid else '')
+        notify(self.customer_id, Notification.Kind.BOOKING, 'Booking moved',
+               f'{old_slot} is now {new_slot}.{price_note}')
+        notify(self.ground.owner_id, Notification.Kind.BOOKING, 'A customer moved their booking',
+               f'{self.customer.full_name or "A customer"} moved {old_slot} to {new_slot}.')
 
     def mark_refunded(self):
         self.refund_status = self.RefundStatus.DONE

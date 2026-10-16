@@ -17,6 +17,8 @@ storage.
   with photos, rating, open/closed status, rates, hours, directions and reviews.
 - Swipe through each ground's **photo gallery** and open photos full screen.
 - Book a 1-hour slot and pay with **eSewa**, **Khalti** or cash at the ground.
+- **Reschedule** an upcoming booking to another free hour at the same ground
+  (online-paid bookings can move to a time with the same price).
 - Cancel with a refund (see [Refund rules](#refund-rules)).
 - **Rate and review** a ground (1–5 stars) after playing there.
 - Get notifications for bookings, cancellations, maintenance, events and notices.
@@ -44,6 +46,11 @@ storage.
 - Remove reviews that break the rules (Django admin panel).
 - Send notices to customers, owners or everyone.
 - Track refunds owed for online payments and mark them as sent.
+
+## Support
+
+Phone **9744340506** · Email **csamip53@gmail.com** (also on the app's
+Profile → Contact us screen).
 
 ## Refund rules
 
@@ -196,8 +203,5 @@ Backend tests use SQLite, so they don't touch the Supabase database.
 
 - Switch eSewa and Khalti to live merchant accounts.
 - Pay out owners' earnings.
-- Fill in the support phone and email in
-  `frontend/lib/core/config/contact_info.dart`.
-- Make the "Reschedule" button on bookings work.
 - Use a paid or self-hosted map tile server once there are many users
   (OpenStreetMap's free server is for light use).

@@ -16,7 +16,10 @@ class BookingCard extends StatelessWidget {
   /// Opens eSewa/Khalti again for a booking still waiting for payment.
   final VoidCallback? onPay;
 
-  const BookingCard({super.key, required this.booking, this.onCancel, this.onPay});
+  /// Moves the booking to another time.
+  final VoidCallback? onReschedule;
+
+  const BookingCard({super.key, required this.booking, this.onCancel, this.onPay, this.onReschedule});
 
   @override
   Widget build(BuildContext context) {
@@ -60,7 +63,7 @@ class BookingCard extends StatelessWidget {
           const SizedBox(height: 12),
           Divider(height: 1, color: AppColors.divider),
           const SizedBox(height: 12),
-          _BookingBody(booking: booking, onCancel: onCancel, onPay: onPay),
+          _BookingBody(booking: booking, onCancel: onCancel, onPay: onPay, onReschedule: onReschedule),
         ],
       ),
     );
@@ -71,14 +74,15 @@ class _BookingBody extends StatelessWidget {
   final BookingModel booking;
   final VoidCallback? onCancel;
   final VoidCallback? onPay;
+  final VoidCallback? onReschedule;
 
-  const _BookingBody({required this.booking, this.onCancel, this.onPay});
+  const _BookingBody({required this.booking, this.onCancel, this.onPay, this.onReschedule});
 
   Widget _priceRow() {
     if (booking.isPayAtGround) {
       return Row(
         children: [
-          Text('Rs ${booking.price.toStringAsFixed(0)}', style: AppTextStyles.price),
+          Text(formatRupees(booking.price), style: AppTextStyles.price),
           const SizedBox(width: 8),
           Text('Pay at the ground', style: TextStyle(color: AppColors.textSecondary, fontStyle: FontStyle.italic)),
         ],
@@ -86,7 +90,7 @@ class _BookingBody extends StatelessWidget {
     }
     return Row(
       children: [
-        Text('Rs ${booking.price.toStringAsFixed(0)}', style: AppTextStyles.price),
+        Text(formatRupees(booking.price), style: AppTextStyles.price),
         const SizedBox(width: 8),
         Text(booking.isPaid ? 'Paid via' : 'Not paid yet ·', style: TextStyle(color: AppColors.textSecondary)),
         const SizedBox(width: 6),
@@ -134,7 +138,7 @@ class _BookingBody extends StatelessWidget {
                 const SizedBox(width: 10),
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: () {},
+                    onPressed: onReschedule,
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.textPrimary,
                       side: BorderSide(color: AppColors.divider),

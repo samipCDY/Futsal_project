@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_text_styles.dart';
 import '../../core/models/ground_model.dart';
+import '../../core/utils/money.dart';
 
 /// How the Home list is ordered.
 enum GroundSort {
@@ -155,7 +156,7 @@ class _FiltersSheetState extends State<_FiltersSheet> {
               ],
             ),
             _choices<double?>('Price per hour', _prices, _maxPrice,
-                (price) => price == null ? 'Any' : 'Up to Rs ${price.toStringAsFixed(0)}', (p) => _maxPrice = p,
+                (price) => price == null ? 'Any' : 'Up to ${formatRupees(price)}', (p) => _maxPrice = p,
                 note: 'Using each ground\'s cheapest rate.'),
             _choices<double?>(
               'Distance',

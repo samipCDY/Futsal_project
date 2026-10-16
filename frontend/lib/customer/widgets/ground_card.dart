@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_text_styles.dart';
 import '../../core/models/ground_model.dart';
+import '../../core/utils/money.dart';
 import '../../core/widgets/photo_gallery.dart';
 import 'ground_reviews.dart';
 
@@ -88,7 +89,7 @@ class GroundCard extends StatelessWidget {
                               text: TextSpan(
                                 children: [
                                   TextSpan(
-                                    text: 'Rs ${ground.priceFrom.toStringAsFixed(0)}',
+                                    text: formatRupees(ground.priceFrom),
                                     style: AppTextStyles.price,
                                   ),
                                   TextSpan(text: '/hour', style: AppTextStyles.caption),

@@ -5,12 +5,14 @@ import '../../core/models/event_model.dart';
 import '../../core/models/ground_model.dart';
 import '../../core/services/api_exception.dart';
 import '../../core/services/futsal_api.dart';
+import '../../core/utils/money.dart';
 import '../../core/utils/time_format.dart';
 import '../../core/widgets/date_strip.dart';
 import '../../core/widgets/event_card.dart';
 import '../../core/widgets/photo_gallery.dart';
 import '../widgets/ground_place_sheet.dart';
 import '../widgets/ground_reviews.dart';
+import '../widgets/slot_grid.dart';
 import 'payment_screen.dart';
 
 const _daysToShow = 14;
@@ -38,6 +40,10 @@ class _GroundBookingScreenState extends State<GroundBookingScreen> {
   String _method = 'cash';
   SlotModel? _selectedSlot;
   bool _isBooking = false;
+
+  /// True until the first day's slots arrive; if today has nothing left to
+  /// book (e.g. it's after closing time), the page moves on to tomorrow.
+  bool _firstLoad = true;
 
   /// Bumped on every slot load so a slow response for a previously selected
   /// day can't overwrite the slots of the day now selected.
@@ -85,6 +91,14 @@ class _GroundBookingScreenState extends State<GroundBookingScreen> {
     try {
       final day = await FutsalApi.fetchSlots(widget.ground.id, _selectedDay);
       if (!mounted || generation != _loadGeneration) return;
+      final skipToday = _firstLoad && _selectedDay == _days.first && day.closedReason == null &&
+          !day.slots.any((slot) => slot.available);
+      _firstLoad = false;
+      if (skipToday) {
+        _selectedDay = _days[1];
+        _loadSlots();
+        return;
+      }
       setState(() {
         _slots = day.slots;
         _closedReason = day.closedReason;
@@ -132,7 +146,7 @@ class _GroundBookingScreenState extends State<GroundBookingScreen> {
           content: Text(
             '${widget.ground.name}\n${booking.dateLabel} · ${booking.timeLabel}\n\n'
             'Booking ref: ${booking.bookingRef}\n'
-            '${booking.isPaid ? 'Paid Rs ${booking.price.toStringAsFixed(0)} with ${booking.paymentLabel} ✓' : 'Pay Rs ${booking.price.toStringAsFixed(0)} at the ground.'}'
+            '${booking.isPaid ? 'Paid ${formatRupees(booking.price)} with ${booking.paymentLabel} ✓' : 'Pay ${formatRupees(booking.price)} at the ground.'}'
             '${booking.isPaid ? '\n\nFree cancellation for 2 hours, then 50% refund.' : ''}',
             textAlign: TextAlign.center,
           ),
@@ -245,8 +259,8 @@ class _GroundBookingScreenState extends State<GroundBookingScreen> {
                     _selectedSlot == null
                         ? 'Select a time'
                         : _method == 'cash'
-                            ? 'Book ${formatClock(_selectedSlot!.startTime)} · Rs ${_selectedSlot!.price.toStringAsFixed(0)}'
-                            : 'Pay Rs ${_selectedSlot!.price.toStringAsFixed(0)} with ${_method == 'khalti' ? 'Khalti' : 'eSewa'}',
+                            ? 'Book ${formatClock(_selectedSlot!.startTime)} · ${formatRupees(_selectedSlot!.price)}'
+                            : 'Pay ${formatRupees(_selectedSlot!.price)} with ${_method == 'khalti' ? 'Khalti' : 'eSewa'}',
                     style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
                   ),
           ),
@@ -278,31 +292,10 @@ class _GroundBookingScreenState extends State<GroundBookingScreen> {
     if (!slots.any((slot) => slot.available)) {
       return Text('No free slots on this day. Try another date.', style: AppTextStyles.body);
     }
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        for (final slot in slots)
-          ChoiceChip(
-            label: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(formatClock(slot.startTime)),
-                Text('Rs ${slot.price.toStringAsFixed(0)}', style: const TextStyle(fontSize: 11)),
-              ],
-            ),
-            selected: _selectedSlot == slot,
-            onSelected: slot.available ? (_) => setState(() => _selectedSlot = slot) : null,
-            selectedColor: AppColors.primaryGreen,
-            labelStyle: TextStyle(
-              color: _selectedSlot == slot
-                  ? Colors.white
-                  : (slot.available ? AppColors.textPrimary : AppColors.textSecondary),
-              decoration: slot.available ? null : TextDecoration.lineThrough,
-            ),
-            showCheckmark: false,
-          ),
-      ],
+    return SlotGrid(
+      slots: slots,
+      selected: _selectedSlot,
+      onSelect: (slot) => setState(() => _selectedSlot = slot),
     );
   }
 }
@@ -311,6 +304,9 @@ class _GroundSummary extends StatelessWidget {
   final GroundModel ground;
 
   const _GroundSummary({required this.ground});
+
+  /// "10 AM", short enough that the three rates never wrap.
+  static String _hour(int hour) => '${hour % 12 == 0 ? 12 : hour % 12} ${hour < 12 ? 'AM' : 'PM'}';
 
   @override
   Widget build(BuildContext context) {
@@ -349,20 +345,21 @@ class _GroundSummary extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _Rate(
                   label: 'Morning',
-                  hours: 'before ${formatClock('$dayStartsHour:00')}',
+                  hours: 'before ${_hour(dayStartsHour)}',
                   price: ground.morningPrice,
                   isPeak: ground.peakPrice == ground.morningPrice),
               _Rate(
                   label: 'Day',
-                  hours: '${formatClock('$dayStartsHour:00')} – ${formatClock('$eveningStartsHour:00')}',
+                  hours: '${_hour(dayStartsHour)} – ${_hour(eveningStartsHour)}',
                   price: ground.dayPrice,
                   isPeak: ground.peakPrice == ground.dayPrice),
               _Rate(
                   label: 'Evening',
-                  hours: 'from ${formatClock('$eveningStartsHour:00')}',
+                  hours: 'from ${_hour(eveningStartsHour)}',
                   price: ground.eveningPrice,
                   isPeak: ground.peakPrice == ground.eveningPrice),
             ],
@@ -403,7 +400,7 @@ class _Rate extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 2),
-          Text('Rs ${price.toStringAsFixed(0)}', style: AppTextStyles.price.copyWith(fontSize: 15)),
+          Text(formatRupees(price), style: AppTextStyles.price.copyWith(fontSize: 15)),
           Text(hours, style: AppTextStyles.caption.copyWith(fontSize: 11), textAlign: TextAlign.center),
         ],
       ),

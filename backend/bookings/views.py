@@ -1,8 +1,9 @@
 from datetime import timedelta
 from decimal import Decimal
 
+from django.db import IntegrityError, transaction
 from django.utils import timezone
-from django.utils.dateparse import parse_date
+from django.utils.dateparse import parse_date, parse_time
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import APIException, NotFound, ValidationError
@@ -14,8 +15,8 @@ from accounts.permissions import IsAdminRole, IsCustomer, IsGroundOwner
 from grounds.models import Ground, slot_has_started
 
 from . import payments
-from .models import Booking, release_unpaid_slots
-from .serializers import BookingSerializer
+from .models import Booking, _rupees, release_unpaid_slots
+from .serializers import BookingSerializer, SlotAlreadyBooked, check_bookable
 
 
 class BookingViewSet(mixins.CreateModelMixin,
@@ -28,7 +29,7 @@ class BookingViewSet(mixins.CreateModelMixin,
     serializer_class = BookingSerializer
 
     def get_permissions(self):
-        if self.action in ('create', 'pay', 'verify_payment'):
+        if self.action in ('create', 'pay', 'verify_payment', 'reschedule'):
             return [IsAuthenticated(), IsCustomer()]
         return super().get_permissions()
 
@@ -117,6 +118,38 @@ class BookingViewSet(mixins.CreateModelMixin,
             Booking.CancelledBy.CUSTOMER if by_customer else Booking.CancelledBy.OWNER,
             '' if by_customer else str(request.data.get('reason', '')),
         )
+        return Response(self.get_serializer(booking).data)
+
+
+    @action(detail=True, methods=['post'])
+    def reschedule(self, request, pk=None):
+        """Moves the customer's upcoming booking to another free hour at the
+        same ground: `{date, start_time}`. A cash booking takes the new
+        hour's price; one paid online can only move to an hour with the same
+        price, so no money changes hands."""
+        booking = self.get_object()
+        if booking.status != Booking.Status.CONFIRMED:
+            raise ValidationError({'detail': 'Only confirmed upcoming bookings can be moved.'})
+        if slot_has_started(booking.date, booking.start_time):
+            raise ValidationError({'detail': 'This game has already started.'})
+        day = parse_date(str(request.data.get('date', '')))
+        start = parse_time(str(request.data.get('start_time', '')))
+        if day is None or start is None:
+            raise ValidationError({'detail': 'Pick a new date and time.'})
+        if (day, start) == (booking.date, booking.start_time):
+            raise ValidationError({'detail': 'That is already your booking time. Pick a different one.'})
+        check_bookable(booking.ground, day, start)
+        price = booking.ground.price_at(start)
+        if booking.is_paid and price != booking.price:
+            raise ValidationError({'start_time': (
+                f'You paid {_rupees(booking.price)}, and this time costs {_rupees(price)}. Pick a time with '
+                f'the same price, or cancel and book again.')})
+        release_unpaid_slots()
+        try:
+            with transaction.atomic():
+                booking.move_to(day, start, price)
+        except IntegrityError:
+            raise SlotAlreadyBooked()
         return Response(self.get_serializer(booking).data)
 
 

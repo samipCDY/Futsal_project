@@ -14,6 +14,23 @@ from .models import Booking, release_unpaid_slots
 MAX_DAYS_AHEAD = 30
 
 
+def check_bookable(ground, day, start):
+    """Raises a ValidationError when the hour starting at `start` on `day`
+    can't be booked at `ground` (whether someone already has it is left to
+    the database)."""
+    if start not in ground.slot_starts():
+        raise serializers.ValidationError(
+            {'start_time': "Pick a 1-hour slot within the ground's opening hours."})
+    if slot_has_started(day, start):
+        raise serializers.ValidationError({'start_time': 'This slot has already started.'})
+    if day > timezone.localdate() + timedelta(days=MAX_DAYS_AHEAD):
+        raise serializers.ValidationError({'date': f'You can book up to {MAX_DAYS_AHEAD} days ahead.'})
+    closure = ground.closure_on(day)
+    if closure:
+        raise serializers.ValidationError(
+            {'date': f'{ground.name} is closed for maintenance that day: {closure.reason}'})
+
+
 class SlotAlreadyBooked(APIException):
     status_code = status.HTTP_409_CONFLICT
     default_detail = 'Sorry, someone just booked this slot. Please pick another time.'
@@ -56,18 +73,7 @@ class BookingSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         ground, day, start = attrs['ground'], attrs['date'], attrs['start_time']
-        if start not in ground.slot_starts():
-            raise serializers.ValidationError(
-                {'start_time': "Pick a 1-hour slot within the ground's opening hours."})
-        if slot_has_started(day, start):
-            raise serializers.ValidationError({'start_time': 'This slot has already started.'})
-        if day > timezone.localdate() + timedelta(days=MAX_DAYS_AHEAD):
-            raise serializers.ValidationError(
-                {'date': f'You can book up to {MAX_DAYS_AHEAD} days ahead.'})
-        closure = ground.closure_on(day)
-        if closure:
-            raise serializers.ValidationError(
-                {'date': f'{ground.name} is closed for maintenance that day: {closure.reason}'})
+        check_bookable(ground, day, start)
         return attrs
 
     def _can_see_customer(self, booking):
