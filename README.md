@@ -8,20 +8,32 @@ storage.
 ## What it does
 
 **Customers**
-- Search grounds near them and see morning, day and evening rates.
+- See their real location on Home (e.g. "Bharatpur, Chitwan") and the grounds
+  nearest them.
+- Search, **filter** (price, distance, rating, open now, saved) and **sort**
+  (nearest, top rated, price, name).
+- Browse a **map** where every ground is a drop-shaped pin: green when open,
+  orange when closed for maintenance. Tap a pin for a Google Maps–style card
+  with photos, rating, open/closed status, rates, hours, directions and reviews.
+- Swipe through each ground's **photo gallery** and open photos full screen.
 - Book a 1-hour slot and pay with **eSewa**, **Khalti** or cash at the ground.
 - Cancel with a refund (see [Refund rules](#refund-rules)).
+- **Rate and review** a ground (1–5 stars) after playing there.
 - Get notifications for bookings, cancellations, maintenance, events and notices.
-- See tournaments and events posted by ground owners.
+- See tournaments and events posted by ground owners, and **call to register**
+  from the event page.
 - Read the rules and regulations from the Profile page.
 
 **Ground owners**
-- Add grounds with photos, three hourly rates and a **lalpurja** (land
-  ownership) photo for verification. Each new ground waits for admin approval.
+- Add grounds with up to **10 photos** (pick a cover), three hourly rates, a
+  location picked on the map and a **lalpurja** (land ownership) photo for
+  verification. Each new ground waits for admin approval, then shows on the
+  customer map.
 - View and cancel bookings. Close a ground for maintenance with a reason;
   everyone booked on those days is cancelled and told why.
-- Create, edit, publish and delete events. An event shows "Expired" once it
-  has passed.
+- Create, edit, publish and delete events, with a phone number customers
+  call to register. An event shows "Expired" once it has passed.
+- Get notified about new reviews.
 - Send notices to their customers.
 - Use a dashboard with today's stats and an **earnings chart**: daily, weekly,
   monthly and yearly.
@@ -29,6 +41,7 @@ storage.
 **Admin**
 - Approve new grounds after checking the lalpurja, owner details and map.
 - Search grounds and take one down for a violation, with a reason.
+- Remove reviews that break the rules (Django admin panel).
 - Send notices to customers, owners or everyone.
 - Track refunds owed for online payments and mark them as sent.
 
@@ -49,6 +62,7 @@ After that the slot is released. Online refunds are sent back by the admin.
 | Part | Built with |
 |---|---|
 | App | Flutter (Android, iOS, web), `provider`, `fl_chart`, `webview_flutter` |
+| Maps | OpenStreetMap via `flutter_map` (free, no key; tiles cached on the phone), `geolocator`, `geocoding` for place names |
 | API | Django 5, Django REST Framework |
 | Login & database | Supabase Auth and Postgres (Django uses its own `django` schema) |
 | Files | Supabase Storage: `avatars`, `ground-photos`, private `ground-documents` |
@@ -160,3 +174,6 @@ Backend tests use SQLite, so they don't touch the Supabase database.
 - Pay out owners' earnings.
 - Fill in the support phone and email in
   `frontend/lib/core/config/contact_info.dart`.
+- Make the "Reschedule" button on bookings work.
+- Use a paid or self-hosted map tile server once there are many users
+  (OpenStreetMap's free server is for light use).

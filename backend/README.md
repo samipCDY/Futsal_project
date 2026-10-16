@@ -20,11 +20,12 @@ All endpoints need a Supabase access token.
 | Method | Path | Who | What |
 |---|---|---|---|
 | GET | `/api/accounts/me/` | anyone | the signed-in user's profile |
-| GET | `/api/grounds/` | anyone | approved, active grounds |
+| GET | `/api/grounds/` | anyone | approved, active grounds, with photos, rating and review count |
 | GET | `/api/grounds/<id>/slots/?date=YYYY-MM-DD` | anyone | 1-hour slots with price and availability |
 | GET | `/api/grounds/favourites/` | customer | favourite grounds |
 | POST, DELETE | `/api/grounds/<id>/favourite/` | customer | add or remove a favourite |
-| GET | `/api/events/` | anyone | published events |
+| GET, POST, DELETE | `/api/grounds/<id>/reviews/` | customer | reviews and star breakdown; write/update or delete your own (only after playing there) |
+| GET | `/api/events/` | anyone | published events, with the phone number to register |
 | GET | `/api/payments/methods/` | anyone | which payment methods are on |
 | GET, POST | `/api/bookings/` | customer: own · owner: their grounds · admin: all | list, or book `{ground, date, start_time, payment_method}` |
 | POST | `/api/bookings/<id>/pay/` | customer | restart an online payment |
@@ -50,7 +51,7 @@ All endpoints need a Supabase access token.
 ## Apps
 
 - `accounts`: Supabase token login, `Profile` (Supabase users), role permissions
-- `grounds`: grounds, rates, approval with lalpurja, maintenance, events
+- `grounds`: grounds, rates, photo galleries, approval with lalpurja, maintenance, events, reviews
 - `bookings`: 1-hour slot bookings (the database blocks double bookings), eSewa/Khalti payments, refunds, earnings
 - `notifications`: in-app notifications and notices
 
