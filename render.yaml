@@ -1,0 +1,54 @@
+# Render blueprint: runs the Django API on the free plan, talking to the
+# Supabase database. In Render: New > Blueprint > pick this repo.
+# Values marked `sync: false` are secrets; Render asks for them once and
+# they never go in git (copy them from backend/.env).
+services:
+  - type: web
+    name: futsal-finder-api
+    runtime: python
+    plan: free
+    region: singapore # closest to Nepal
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
+    startCommand: python manage.py migrate --noinput && gunicorn futsal_backend.wsgi --bind 0.0.0.0:$PORT --workers 2 --timeout 60
+    healthCheckPath: /api/health/
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.10
+      - key: DEBUG
+        value: "False"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_ENGINE
+        value: postgres
+      - key: DATABASE_NAME
+        value: postgres
+      - key: DATABASE_USER
+        value: postgres.oauxglvqzjjaaezqapkl
+      - key: DATABASE_HOST
+        value: aws-0-ap-northeast-1.pooler.supabase.com
+      - key: DATABASE_PORT
+        value: "5432"
+      - key: DATABASE_SSLMODE
+        value: require
+      - key: DATABASE_PASSWORD
+        sync: false
+      - key: SUPABASE_URL
+        value: https://oauxglvqzjjaaezqapkl.supabase.co
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: KHALTI_SECRET_KEY
+        sync: false
+      - key: EMAIL_HOST
+        value: smtp-relay.brevo.com
+      # Free servers can't use the usual mail port 587; Brevo also takes 2525.
+      - key: EMAIL_PORT
+        value: "2525"
+      - key: EMAIL_HOST_USER
+        sync: false
+      - key: EMAIL_HOST_PASSWORD
+        sync: false
+      - key: DEFAULT_FROM_EMAIL
+        sync: false
+      - key: ADMIN_NOTIFY_EMAILS
+        sync: false

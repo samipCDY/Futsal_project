@@ -32,7 +32,18 @@ SECRET_KEY = os.environ.get(
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = ['*'] if DEBUG else []
+# On a server, list its address(es) in ALLOWED_HOSTS (comma separated).
+# Render fills in RENDER_EXTERNAL_HOSTNAME by itself.
+ALLOWED_HOSTS = ['*'] if DEBUG else [h.strip() for h in os.environ.get('ALLOWED_HOSTS', '').split(',') if h.strip()]
+if os.environ.get('RENDER_EXTERNAL_HOSTNAME'):
+    ALLOWED_HOSTS.append(os.environ['RENDER_EXTERNAL_HOSTNAME'])
+CSRF_TRUSTED_ORIGINS = [f'https://{host}' for host in ALLOWED_HOSTS if host != '*']
+
+if not DEBUG:
+    # The host's proxy speaks https to phones and plain http to Django.
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
 
 
 # Application definition
@@ -60,6 +71,7 @@ AUTH_USER_MODEL = 'accounts.User'
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',  # serves the admin panel's CSS/JS on a server
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -113,6 +125,9 @@ if os.environ.get('DATABASE_ENGINE') == 'postgres' and not RUNNING_TESTS:
             'PASSWORD': os.environ.get('DATABASE_PASSWORD', ''),
             'HOST': os.environ.get('DATABASE_HOST', 'localhost'),
             'PORT': os.environ.get('DATABASE_PORT', '5432'),
+            'CONN_MAX_AGE': 60,
+            'CONN_HEALTH_CHECKS': True,
+            'OPTIONS': {'sslmode': os.environ.get('DATABASE_SSLMODE', 'prefer')},
         }
     }
 else:
@@ -159,6 +174,14 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'  # `manage.py collectstatic` gathers files here
+STORAGES = {
+    'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+    'staticfiles': {
+        'BACKEND': ('whitenoise.storage.CompressedManifestStaticFilesStorage' if not DEBUG and not RUNNING_TESTS
+                    else 'django.contrib.staticfiles.storage.StaticFilesStorage'),
+    },
+}
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
@@ -191,7 +214,8 @@ PAYMENT_RETURN_URL = os.environ.get('PAYMENT_RETURN_URL') or 'https://futsalfind
 PAYMENT_WEBSITE_URL = os.environ.get('PAYMENT_WEBSITE_URL') or 'https://futsalfinder.app/'
 
 # Where links in emails point, e.g. to a ground in the admin panel.
-BACKEND_URL = os.environ.get('BACKEND_URL', 'http://localhost:8000').rstrip('/')
+BACKEND_URL = (os.environ.get('BACKEND_URL') or os.environ.get('RENDER_EXTERNAL_URL')
+               or 'http://localhost:8000').rstrip('/')
 
 # Emails to admins (new grounds to approve) and owners (approved/rejected).
 # Without an SMTP password they're only printed in the runserver window.

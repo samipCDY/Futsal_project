@@ -142,6 +142,31 @@ a deployed backend instead:
 flutter run --dart-define=API_BASE_URL=https://your-server.com/api
 ```
 
+## Live server
+
+The app talks to the live API at `https://futsal-finder-api.onrender.com/api`
+(set in `frontend/lib/core/config/api_config.dart`), so it works on any
+network without the USB cable. The database is Supabase, already in the cloud.
+
+To set up the server once:
+
+1. Sign up at [render.com](https://render.com) with GitHub.
+2. **New → Blueprint**, pick this repo. Render reads `render.yaml`.
+3. Fill in the secret values it asks for, copied from `backend/.env`.
+4. Wait for the deploy, then open `https://<your-service>.onrender.com/api/health/`.
+   It should say `{"status": "ok"}`.
+
+The free plan sleeps after 15 minutes without use; the first request after
+that takes up to a minute. A free uptime pinger (e.g. cron-job.org) hitting
+`/api/health/` every 10 minutes keeps it awake.
+
+To use the backend on your PC instead (phone on USB):
+
+```powershell
+adb reverse tcp:8000 tcp:8000
+flutter run --dart-define=API_BASE_URL=http://localhost:8000/api
+```
+
 ## Testing payments
 
 Both gateways run in **test mode** by default, so no real money moves.
@@ -169,7 +194,6 @@ Backend tests use SQLite, so they don't touch the Supabase database.
 
 ## Still to do
 
-- Deploy the backend.
 - Switch eSewa and Khalti to live merchant accounts.
 - Pay out owners' earnings.
 - Fill in the support phone and email in

@@ -8,7 +8,9 @@ import 'api_exception.dart';
 /// Calls the Django API as the signed-in user. Every request carries the
 /// Supabase access token, which is how Django knows who's asking.
 class ApiClient {
-  static const _timeout = Duration(seconds: 15);
+  /// Long enough for the free server to wake up (it sleeps when unused and
+  /// takes up to a minute to start again).
+  static const _timeout = Duration(seconds: 70);
 
   static Future<dynamic> get(String path, {Map<String, String>? query}) =>
       _send((headers) => http.get(_uri(path, query), headers: headers));
