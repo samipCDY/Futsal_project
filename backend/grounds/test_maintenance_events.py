@@ -155,6 +155,16 @@ class EventTests(ProfilesTableMixin, TestCase):
         self.assertEqual(set(self.create(ground=self.other_ground.id).json()), {'ground'})
         self.assertEqual(client_for(self.customer).post('/api/owner/events/', {}, format='json').status_code, 403)
 
+    def test_customers_get_a_number_to_call_to_register(self):
+        Profile = type(self.owner)
+        Profile.objects.filter(pk=self.owner.pk).update(mobile_number='9800000001')
+        self.create(is_published=True, title='Owner number')
+        self.create(is_published=True, title='Own number', contact_phone=' 981-234 5678 ',
+                    starts_at=(self.when + timedelta(hours=1)).isoformat())
+        phones = {e['title']: e['contact_phone'] for e in client_for(self.customer).get('/api/events/').json()}
+        self.assertEqual(phones, {'Owner number': '9800000001', 'Own number': '981-234 5678'})
+        self.assertEqual(set(self.create(contact_phone='call me').json()), {'contact_phone'})
+
     def test_past_events_show_as_expired_after_coming_ones(self):
         self.create(is_published=True, title='Coming')
         Event.objects.create(owner=self.owner, ground=self.ground, title='Finished', is_published=True,

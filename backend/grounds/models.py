@@ -13,6 +13,8 @@ from . import notify
 DAY_STARTS = time(10)  # morning rate before this
 EVENING_STARTS = time(16)  # evening (peak) rate from this
 
+MAX_PHOTOS = 10
+
 
 def slot_has_started(day, start):
     """Whether a slot on `day` at `start` (Nepal time) is already underway."""
@@ -53,7 +55,9 @@ class Ground(models.Model):
     day_price = models.DecimalField(max_digits=8, decimal_places=2, help_text='Per hour, 10 AM – 4 PM.')
     evening_price = models.DecimalField(max_digits=8, decimal_places=2,
                                         help_text='Per hour, from 4 PM (peak time).')
-    image_url = models.URLField(blank=True)
+    image_url = models.URLField(blank=True, help_text='The cover photo: always the first of `photos`.')
+    photos = models.JSONField(default=list, blank=True,
+                              help_text=f'Up to {MAX_PHOTOS} photo URLs in the "ground-photos" bucket, cover first.')
     badge_label = models.CharField(max_length=60, blank=True, help_text='Short perk, e.g. "Free bibs + water".')
     opens_at = models.TimeField(default=time(6))
     closes_at = models.TimeField(default=time(22))
@@ -175,6 +179,8 @@ class Event(models.Model):
     starts_at = models.DateTimeField()
     ends_at = models.DateTimeField(null=True, blank=True, help_text='Leave empty for a one-off time.')
     image_url = models.URLField(blank=True)
+    contact_phone = models.CharField(max_length=20, blank=True,
+                                     help_text="Customers call this to register. Empty = the owner's mobile.")
     is_published = models.BooleanField(default=False)
     published_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

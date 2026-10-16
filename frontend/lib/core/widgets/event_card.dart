@@ -3,10 +3,22 @@ import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
 import '../constants/app_text_styles.dart';
 import '../models/event_model.dart';
+import '../screens/event_detail_screen.dart';
 import '../utils/time_format.dart';
 
+/// When an event is on, e.g. "Sat 18 Oct, 2:00 PM – 6:00 PM".
+String eventWhen(EventModel event) {
+  final end = event.endsAt;
+  if (end == null) return formatDateTime(event.startsAt);
+  final sameDay = end.year == event.startsAt.year && end.month == event.startsAt.month && end.day == event.startsAt.day;
+  return sameDay
+      ? '${formatDateTime(event.startsAt)} – ${formatClockOf(end)}'
+      : '${formatDateTime(event.startsAt)} – ${formatDateTime(end)}';
+}
+
 /// One event: poster, title, where and when, and an "Expired" or "Draft"
-/// label. Owners get their edit/publish buttons through [actions].
+/// label. Tapping it opens the full details with the number to call to
+/// register. Owners get their edit/publish buttons through [actions].
 class EventCard extends StatelessWidget {
   final EventModel event;
   final Widget? actions;
@@ -16,72 +28,86 @@ class EventCard extends StatelessWidget {
 
   const EventCard({super.key, required this.event, this.actions, this.showGround = true});
 
-  String get _when {
-    final end = event.endsAt;
-    if (end == null) return formatDateTime(event.startsAt);
-    final sameDay = end.year == event.startsAt.year && end.month == event.startsAt.month && end.day == event.startsAt.day;
-    return sameDay
-        ? '${formatDateTime(event.startsAt)} – ${formatClockOf(end)}'
-        : '${formatDateTime(event.startsAt)} – ${formatDateTime(end)}';
-  }
-
   @override
   Widget build(BuildContext context) {
     return Opacity(
       opacity: event.isExpired ? 0.6 : 1,
-      child: Container(
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.divider),
+      child: InkWell(
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => EventDetailScreen(event: event)),
         ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (event.imageUrl.isNotEmpty)
-              CachedNetworkImage(
-                imageUrl: event.imageUrl,
-                height: 150,
-                width: double.infinity,
-                fit: BoxFit.cover,
-                errorWidget: (_, __, ___) => const SizedBox.shrink(),
-              ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(Icons.emoji_events_outlined, color: AppColors.accentOrange, size: 20),
-                      const SizedBox(width: 6),
-                      Expanded(child: Text(event.title, style: AppTextStyles.subheading.copyWith(fontSize: 16))),
-                      if (event.isExpired)
-                        _Label(text: 'EXPIRED', background: AppColors.statusCompletedBg,
-                            foreground: AppColors.statusCompletedText)
-                      else if (!event.isPublished)
-                        _Label(text: 'DRAFT', background: AppColors.statusPendingBg,
-                            foreground: AppColors.statusPendingText),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  _InfoRow(icon: Icons.schedule, text: _when),
-                  if (showGround)
-                    _InfoRow(icon: Icons.location_on_outlined, text: '${event.groundName}, ${event.groundArea}'),
-                  if (event.description.isNotEmpty) ...[
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.divider),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (event.imageUrl.isNotEmpty)
+                CachedNetworkImage(
+                  imageUrl: event.imageUrl,
+                  height: 150,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                  errorWidget: (_, __, ___) => const SizedBox.shrink(),
+                ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.emoji_events_outlined, color: AppColors.accentOrange, size: 20),
+                        const SizedBox(width: 6),
+                        Expanded(child: Text(event.title, style: AppTextStyles.subheading.copyWith(fontSize: 16))),
+                        if (event.isExpired)
+                          _Label(
+                              text: 'EXPIRED',
+                              background: AppColors.statusCompletedBg,
+                              foreground: AppColors.statusCompletedText)
+                        else if (!event.isPublished)
+                          _Label(
+                              text: 'DRAFT',
+                              background: AppColors.statusPendingBg,
+                              foreground: AppColors.statusPendingText),
+                      ],
+                    ),
                     const SizedBox(height: 6),
-                    Text(event.description, style: AppTextStyles.body),
+                    _InfoRow(icon: Icons.schedule, text: eventWhen(event)),
+                    if (showGround)
+                      _InfoRow(icon: Icons.location_on_outlined, text: '${event.groundName}, ${event.groundArea}'),
+                    if (event.description.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(event.description, maxLines: 3, overflow: TextOverflow.ellipsis, style: AppTextStyles.body),
+                    ],
+                    if (!event.isExpired && event.isPublished) ...[
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Icon(Icons.phone_in_talk_outlined, size: 16, color: AppColors.primaryGreen),
+                          const SizedBox(width: 6),
+                          Text('Tap for details · call to register',
+                              style: AppTextStyles.caption
+                                  .copyWith(color: AppColors.primaryGreen, fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                    ],
+                    if (actions != null) ...[
+                      const SizedBox(height: 8),
+                      actions!,
+                    ],
                   ],
-                  if (actions != null) ...[
-                    const SizedBox(height: 8),
-                    actions!,
-                  ],
-                ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

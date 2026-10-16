@@ -8,6 +8,7 @@ import '../../core/services/futsal_api.dart';
 import '../../core/utils/time_format.dart';
 import '../../core/widgets/date_strip.dart';
 import '../../core/widgets/event_card.dart';
+import '../../core/widgets/photo_gallery.dart';
 import '../widgets/ground_place_sheet.dart';
 import '../widgets/ground_reviews.dart';
 import 'payment_screen.dart';
@@ -160,6 +161,10 @@ class _GroundBookingScreenState extends State<GroundBookingScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
         children: [
+          if (ground.photos.isNotEmpty) ...[
+            PhotoCarousel(photos: ground.photos, height: 200),
+            const SizedBox(height: 12),
+          ],
           _GroundSummary(ground: ground),
           for (final period in ground.maintenance) ...[
             const SizedBox(height: 12),

@@ -5,6 +5,7 @@ import '../../core/constants/app_text_styles.dart';
 import '../../core/models/ground_model.dart';
 import '../../core/utils/money.dart';
 import '../../core/utils/time_format.dart';
+import '../../core/widgets/photo_gallery.dart';
 import 'ground_reviews.dart';
 
 /// Opens Google Maps with driving directions to a ground.
@@ -127,7 +128,7 @@ class GroundPlaceSheet extends StatelessWidget {
             for (final period in ground.maintenance) _ClosureBanner(period: period),
           ],
           const SizedBox(height: 14),
-          _Photo(ground: ground),
+          PhotoCarousel(photos: ground.photos, height: 190),
           const SizedBox(height: 16),
           Text('Hourly rates', style: AppTextStyles.subheading),
           const SizedBox(height: 8),
@@ -223,36 +224,6 @@ class _ClosureBanner extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _Photo extends StatelessWidget {
-  final GroundModel ground;
-
-  const _Photo({required this.ground});
-
-  @override
-  Widget build(BuildContext context) {
-    final placeholder = DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [AppColors.primaryGreen.withValues(alpha: 0.85), AppColors.darkGreen],
-        ),
-      ),
-      child: const Center(child: Icon(Icons.sports_soccer, size: 56, color: Colors.white24)),
-    );
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(14),
-      child: SizedBox(
-        height: 170,
-        width: double.infinity,
-        child: ground.imageUrl.isEmpty
-            ? placeholder
-            : Image.network(ground.imageUrl, fit: BoxFit.cover, errorBuilder: (_, __, ___) => placeholder),
       ),
     );
   }

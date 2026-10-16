@@ -38,8 +38,9 @@ class _GroundFormScreenState extends State<GroundFormScreen> {
   late int _opensAt; // hour, 0-23
   late int _closesAt;
   LatLng? _location;
-  late String _photoUrl; // saved photo, "" if none
-  XFile? _newPhoto; // picked but not uploaded yet
+  /// The ground's photos in order, cover first: a URL when already saved,
+  /// an XFile when picked but not uploaded yet.
+  late final List<Object> _photos;
   late final String _documentPath; // saved lalpurja photo, "" if none
   XFile? _newDocument;
   late bool _isActive;
@@ -62,7 +63,7 @@ class _GroundFormScreenState extends State<GroundFormScreen> {
     _opensAt = int.parse((ground?.opensAt ?? '06').split(':').first);
     _closesAt = int.parse((ground?.closesAt ?? '22').split(':').first);
     _location = ground?.location;
-    _photoUrl = ground?.imageUrl ?? '';
+    _photos = [...?ground?.photos];
     _documentPath = ground?.ownershipDocument ?? '';
     _isActive = ground?.isActive ?? true;
   }
@@ -143,18 +144,63 @@ class _GroundFormScreenState extends State<GroundFormScreen> {
     }
   }
 
-  Future<void> _pickPhoto() async {
-    final choice = await _askPhotoSource(canRemove: _newPhoto != null || _photoUrl.isNotEmpty);
+  Future<void> _addPhotos() async {
+    final room = maxGroundPhotos - _photos.length;
+    if (room <= 0) return;
+    final choice = await _askPhotoSource(canRemove: false);
     if (choice == null || !mounted) return;
-    if (choice == 'remove') {
-      setState(() {
-        _newPhoto = null;
-        _photoUrl = '';
-      });
+    if (choice == 'camera' || room == 1) {
+      final photo = await _takePhoto(choice);
+      if (photo != null) setState(() => _photos.add(photo));
       return;
     }
-    final photo = await _takePhoto(choice);
-    if (photo != null) setState(() => _newPhoto = photo);
+    try {
+      final picked = await ImagePicker().pickMultiImage(maxWidth: 1280, maxHeight: 1280, imageQuality: 85, limit: room);
+      if (!mounted || picked.isEmpty) return;
+      setState(() => _photos.addAll(picked.take(room)));
+      if (picked.length > room) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Only $maxGroundPhotos photos fit, so the extra ones were left out.')),
+        );
+      }
+    } on PlatformException {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text("Couldn't open the gallery. Please allow access in your phone's settings."),
+        ));
+      }
+    }
+  }
+
+  /// Make a photo the cover (shown first everywhere), or remove it.
+  Future<void> _photoOptions(int index) async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (index > 0)
+              ListTile(
+                leading: Icon(Icons.star_outline, color: AppColors.primaryGreen),
+                title: const Text('Make it the cover photo'),
+                onTap: () => Navigator.pop(sheetContext, 'cover'),
+              ),
+            ListTile(
+              leading: Icon(Icons.delete_outline, color: AppColors.dangerText),
+              title: Text('Remove photo', style: TextStyle(color: AppColors.dangerText)),
+              onTap: () => Navigator.pop(sheetContext, 'remove'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (choice == null || !mounted) return;
+    setState(() {
+      final photo = _photos.removeAt(index);
+      if (choice == 'cover') _photos.insert(0, photo);
+    });
   }
 
   /// The lalpurja is required, so it can be replaced but not removed. A
@@ -184,15 +230,23 @@ class _GroundFormScreenState extends State<GroundFormScreen> {
     setState(() => _isSaving = true);
     final messenger = ScaffoldMessenger.of(context);
     final ownerId = context.read<ProfileProvider>().profile!.id;
-    final oldPhotoUrl = widget.ground?.imageUrl ?? '';
-    String? uploadedUrl;
+    final oldPhotos = widget.ground?.photos ?? const <String>[];
+    final uploaded = <String>[];
     String? uploadedDocument;
     try {
-      if (_newPhoto != null) uploadedUrl = await PhotoStorage.groundPhotos.upload(ownerId, _newPhoto!);
+      final photoUrls = <String>[];
+      for (final photo in _photos) {
+        if (photo is XFile) {
+          final url = await PhotoStorage.groundPhotos.upload(ownerId, photo);
+          uploaded.add(url);
+          photoUrls.add(url);
+        } else {
+          photoUrls.add(photo as String);
+        }
+      }
       if (_newDocument != null) {
         uploadedDocument = await PhotoStorage.groundDocuments.upload(ownerId, _newDocument!);
       }
-      final photoUrl = uploadedUrl ?? _photoUrl;
       final documentPath = uploadedDocument ?? _documentPath;
       final saved = await OwnerApi.saveGround({
         'name': _name.text.trim(),
@@ -206,12 +260,14 @@ class _GroundFormScreenState extends State<GroundFormScreen> {
         'closes_at': '${_closesAt.toString().padLeft(2, '0')}:00',
         'latitude': _location!.latitude.toStringAsFixed(6),
         'longitude': _location!.longitude.toStringAsFixed(6),
-        'image_url': photoUrl,
+        'photos': photoUrls,
         'ownership_document': documentPath,
         if (_isEditing) 'is_active': _isActive,
       }, groundId: widget.ground?.id);
 
-      if (oldPhotoUrl.isNotEmpty && oldPhotoUrl != photoUrl) PhotoStorage.groundPhotos.delete(oldPhotoUrl);
+      for (final old in oldPhotos) {
+        if (!photoUrls.contains(old)) PhotoStorage.groundPhotos.delete(old);
+      }
       if (_documentPath.isNotEmpty && _documentPath != documentPath) {
         PhotoStorage.groundDocuments.delete(_documentPath);
       }
@@ -225,7 +281,9 @@ class _GroundFormScreenState extends State<GroundFormScreen> {
       ));
       if (mounted) Navigator.pop(context);
     } on ApiException catch (e) {
-      if (uploadedUrl != null) PhotoStorage.groundPhotos.delete(uploadedUrl);
+      for (final url in uploaded) {
+        PhotoStorage.groundPhotos.delete(url);
+      }
       if (uploadedDocument != null) PhotoStorage.groundDocuments.delete(uploadedDocument);
       if (!mounted) return;
       setState(() => _isSaving = false);
@@ -281,7 +339,7 @@ class _GroundFormScreenState extends State<GroundFormScreen> {
               ),
               const SizedBox(height: 16),
             ],
-            _PhotoPicker(newPhoto: _newPhoto, photoUrl: _photoUrl, onTap: _pickPhoto),
+            _PhotosPicker(photos: _photos, onAdd: _addPhotos, onTapPhoto: _photoOptions),
             const SizedBox(height: 20),
             TextFormField(
               controller: _name,
@@ -411,59 +469,97 @@ class _GroundFormScreenState extends State<GroundFormScreen> {
   }
 }
 
-class _PhotoPicker extends StatelessWidget {
-  final XFile? newPhoto;
-  final String photoUrl;
-  final VoidCallback onTap;
+/// The ground's photos in a row, cover first, with a tile to add more.
+class _PhotosPicker extends StatelessWidget {
+  final List<Object> photos; // URL or XFile
+  final VoidCallback onAdd;
+  final ValueChanged<int> onTapPhoto;
 
-  const _PhotoPicker({required this.newPhoto, required this.photoUrl, required this.onTap});
+  const _PhotosPicker({required this.photos, required this.onAdd, required this.onTapPhoto});
 
   @override
   Widget build(BuildContext context) {
-    final Widget image;
-    if (newPhoto != null) {
-      image = Image.file(File(newPhoto!.path), fit: BoxFit.cover);
-    } else if (photoUrl.isNotEmpty) {
-      image = CachedNetworkImage(imageUrl: photoUrl, fit: BoxFit.cover);
-    } else {
-      image = Container(
-        color: AppColors.subtleFill,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
           children: [
-            Icon(Icons.add_a_photo_outlined, size: 36, color: AppColors.textSecondary),
-            const SizedBox(height: 6),
-            Text('Add a photo of your ground', style: AppTextStyles.caption),
+            Text('Photos', style: AppTextStyles.subheading.copyWith(fontSize: 15)),
+            const Spacer(),
+            Text('${photos.length} / $maxGroundPhotos', style: AppTextStyles.caption),
           ],
         ),
-      );
-    }
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(14),
-        child: SizedBox(
-          height: 170,
-          width: double.infinity,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              image,
-              if (newPhoto != null || photoUrl.isNotEmpty)
-                Positioned(
-                  right: 10,
-                  bottom: 10,
+        const SizedBox(height: 2),
+        Text('Customers swipe through these. Add the pitch, lights, changing rooms and parking. '
+            'Tap a photo to make it the cover or remove it.', style: AppTextStyles.caption),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 104,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: photos.length + (photos.length < maxGroundPhotos ? 1 : 0),
+            separatorBuilder: (_, __) => const SizedBox(width: 10),
+            itemBuilder: (context, index) {
+              if (index == photos.length) {
+                return InkWell(
+                  onTap: onAdd,
+                  borderRadius: BorderRadius.circular(12),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(color: const Color(0x99000000), borderRadius: BorderRadius.circular(20)),
-                    child: const Text('Change photo', style: TextStyle(color: Colors.white, fontSize: 12)),
+                    width: 104,
+                    decoration: BoxDecoration(
+                      color: AppColors.subtleFill,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.divider),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.add_a_photo_outlined, color: AppColors.primaryGreen),
+                        const SizedBox(height: 6),
+                        Text(photos.isEmpty ? 'Add photos' : 'Add more',
+                            style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  ),
+                );
+              }
+              final photo = photos[index];
+              return InkWell(
+                onTap: () => onTapPhoto(index),
+                borderRadius: BorderRadius.circular(12),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: SizedBox(
+                    width: 104,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        photo is XFile
+                            ? Image.file(File(photo.path), fit: BoxFit.cover)
+                            : CachedNetworkImage(imageUrl: photo as String, fit: BoxFit.cover),
+                        if (index == 0)
+                          Positioned(
+                            left: 6,
+                            top: 6,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppColors.primaryGreen,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Text('Cover',
+                                  style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700)),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
-            ],
+              );
+            },
           ),
         ),
-      ),
+      ],
     );
   }
 }

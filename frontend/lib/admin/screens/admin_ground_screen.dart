@@ -1,4 +1,3 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/app_colors.dart';
@@ -10,6 +9,7 @@ import '../../core/utils/launcher.dart';
 import '../../core/utils/money.dart';
 import '../../core/utils/time_format.dart';
 import '../../core/widgets/ground_status_chip.dart';
+import '../../core/widgets/photo_gallery.dart';
 
 /// Everything an admin needs to decide on one ground: the owner, where it
 /// is, and the lalpurja photo. Approve or reject at the bottom.
@@ -121,11 +121,8 @@ class _AdminGroundScreenState extends State<AdminGroundScreen> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
       children: [
-        if (ground.imageUrl.isNotEmpty) ...[
-          ClipRRect(
-            borderRadius: BorderRadius.circular(14),
-            child: CachedNetworkImage(imageUrl: ground.imageUrl, height: 170, width: double.infinity, fit: BoxFit.cover),
-          ),
+        if (ground.photos.isNotEmpty) ...[
+          PhotoCarousel(photos: ground.photos, height: 190),
           const SizedBox(height: 16),
         ],
         Row(

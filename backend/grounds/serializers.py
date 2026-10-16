@@ -6,7 +6,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from . import notify
-from .models import Event, Ground, Maintenance, Review
+from .models import MAX_PHOTOS, Event, Ground, Maintenance, Review
 from .storage import signed_document_url
 
 # An admin checks these again when the owner changes them.
@@ -58,7 +58,7 @@ class GroundSerializer(serializers.ModelSerializer):
         model = Ground
         fields = [
             'id', 'name', 'area', 'address', 'latitude', 'longitude', 'morning_price', 'day_price',
-            'evening_price', 'image_url', 'badge_label', 'opens_at', 'closes_at', 'is_favourite',
+            'evening_price', 'image_url', 'photos', 'badge_label', 'opens_at', 'closes_at', 'is_favourite',
             'rating', 'review_count', 'maintenance',
         ]
 
@@ -99,7 +99,7 @@ class OwnerGroundSerializer(serializers.ModelSerializer):
         model = Ground
         fields = [
             'id', 'name', 'area', 'address', 'latitude', 'longitude', 'morning_price', 'day_price',
-            'evening_price', 'image_url', 'badge_label', 'opens_at', 'closes_at', 'is_active',
+            'evening_price', 'image_url', 'photos', 'badge_label', 'opens_at', 'closes_at', 'is_active',
             'ownership_document', 'status', 'review_note', 'created_at', 'maintenance',
         ]
         read_only_fields = ['id', 'status', 'review_note', 'created_at']
@@ -141,15 +141,26 @@ class OwnerGroundSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Please pick the location on the map.')
         return value
 
-    def validate_image_url(self, value):
-        """Only a photo the owner uploaded to their own folder (or "")."""
-        if not value:
-            return ''
+    def _own_photo(self, value):
+        """Only a photo the owner uploaded to their own folder."""
         owner_id = self.context['request'].user.pk
         own_folder = f'{settings.SUPABASE_URL}/storage/v1/object/public/ground-photos/{owner_id}/'
-        if not value.startswith(own_folder) or '..' in value:
-            raise serializers.ValidationError('Please upload the photo from the app.')
+        if not isinstance(value, str) or not value.startswith(own_folder) or '..' in value:
+            raise serializers.ValidationError('Please upload the photos from the app.')
         return value
+
+    def validate_image_url(self, value):
+        return self._own_photo(value) if value else ''
+
+    def validate_photos(self, value):
+        if not isinstance(value, list):
+            raise serializers.ValidationError('Send a list of photos.')
+        if len(value) > MAX_PHOTOS:
+            raise serializers.ValidationError(f'You can add up to {MAX_PHOTOS} photos.')
+        photos = [self._own_photo(photo) for photo in value]
+        if len(set(photos)) != len(photos):
+            raise serializers.ValidationError('The same photo was added twice.')
+        return photos
 
     def validate_ownership_document(self, value):
         """A file the owner uploaded to their own folder of the private
@@ -167,6 +178,11 @@ class OwnerGroundSerializer(serializers.ModelSerializer):
         if self.instance is None and not attrs.get('ownership_document'):
             raise serializers.ValidationError(
                 {'ownership_document': 'Please add a photo of the lalpurja so we can check the ground is yours.'})
+        # The first photo is the cover. Older apps send only image_url.
+        if 'photos' in attrs:
+            attrs['image_url'] = attrs['photos'][0] if attrs['photos'] else ''
+        elif 'image_url' in attrs:
+            attrs['photos'] = [attrs['image_url']] if attrs['image_url'] else []
         return attrs
 
     def create(self, validated_data):
@@ -203,7 +219,7 @@ class AdminGroundSerializer(serializers.ModelSerializer):
         model = Ground
         fields = [
             'id', 'name', 'area', 'address', 'latitude', 'longitude', 'morning_price', 'day_price',
-            'evening_price', 'image_url', 'badge_label', 'opens_at', 'closes_at', 'is_active',
+            'evening_price', 'image_url', 'photos', 'badge_label', 'opens_at', 'closes_at', 'is_active',
             'status', 'review_note', 'reviewed_at', 'created_at',
             'owner_name', 'owner_phone', 'owner_email', 'owner_address', 'document_url',
         ]
@@ -230,12 +246,18 @@ class EventSerializer(serializers.ModelSerializer):
         model = Event
         fields = [
             'id', 'ground', 'ground_name', 'ground_area', 'title', 'description', 'starts_at', 'ends_at',
-            'image_url', 'is_published', 'is_expired', 'is_mine', 'created_at',
+            'image_url', 'contact_phone', 'is_published', 'is_expired', 'is_mine', 'created_at',
         ]
         read_only_fields = fields
 
     def get_is_mine(self, event):
         return event.owner_id == self.context['request'].user.pk
+
+    def to_representation(self, event):
+        data = super().to_representation(event)
+        # Customers register by phone; without a number of its own, the owner's.
+        data['contact_phone'] = event.contact_phone or event.owner.mobile_number
+        return data
 
 
 class OwnerEventSerializer(EventSerializer):
@@ -259,6 +281,14 @@ class OwnerEventSerializer(EventSerializer):
         value = value.strip()
         if len(value) > 2000:
             raise serializers.ValidationError('Please keep the description under 2000 characters.')
+        return value
+
+    def validate_contact_phone(self, value):
+        """A phone number customers can call, e.g. 9812345678 or 01-4123456."""
+        value = value.strip()
+        digits = re.sub(r'[\s-]', '', value)
+        if value and not re.fullmatch(r'\+?\d{7,15}', digits):
+            raise serializers.ValidationError('Enter a phone number customers can call, e.g. 9812345678.')
         return value
 
     def validate_image_url(self, value):

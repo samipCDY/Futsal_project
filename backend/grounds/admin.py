@@ -22,7 +22,7 @@ class GroundAdmin(admin.ModelAdmin):
     fieldsets = (
         ('Approval', {'fields': ('owner_details', 'map_link', 'lalpurja', 'status', 'review_note', 'reviewed_at')}),
         ('Ground', {'fields': (
-            'owner', 'name', 'area', 'address', ('latitude', 'longitude'), 'image_url', 'badge_label',
+            'owner', 'name', 'area', 'address', ('latitude', 'longitude'), 'image_url', 'photos', 'badge_label',
             ('opens_at', 'closes_at'), 'is_active', 'created_at',
         )}),
         ('Hourly rates (Rs)', {'fields': (('morning_price', 'day_price', 'evening_price'),)}),

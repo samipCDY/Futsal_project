@@ -189,6 +189,31 @@ class OwnerGroundApiTests(ProfilesTableMixin, TestCase):
                                                     format='json')
         self.assertEqual(response.status_code, 400)
 
+    def test_photo_gallery_cover_is_first_and_limited_to_ten(self):
+        folder = f'{settings.SUPABASE_URL}/storage/v1/object/public/ground-photos/{self.owner.id}/'
+        photos = [f'{folder}p{i}.jpg' for i in range(3)]
+        response = self.client_for(self.owner).post('/api/owner/grounds/', {**self.valid, 'photos': photos},
+                                                    format='json')
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual((response.json()['photos'], response.json()['image_url']), (photos, photos[0]))
+
+        ground_id = response.json()['id']
+        response = self.client_for(self.owner).patch(f'/api/owner/grounds/{ground_id}/', {'photos': []},
+                                                     format='json')
+        self.assertEqual((response.json()['photos'], response.json()['image_url']), ([], ''))
+
+        for bad in ([f'{folder}p{i}.jpg' for i in range(11)], [photos[0], photos[0]],
+                    [photos[0].replace(str(self.owner.id), str(self.other_owner.id))]):
+            response = self.client_for(self.owner).patch(f'/api/owner/grounds/{ground_id}/', {'photos': bad},
+                                                         format='json')
+            self.assertEqual(response.status_code, 400, bad)
+
+    def test_old_apps_sending_one_photo_fill_the_gallery(self):
+        own = f'{settings.SUPABASE_URL}/storage/v1/object/public/ground-photos/{self.owner.id}/g.jpg'
+        response = self.client_for(self.owner).post('/api/owner/grounds/', {**self.valid, 'image_url': own},
+                                                    format='json')
+        self.assertEqual(response.json()['photos'], [own])
+
     def test_customers_cannot_manage_grounds(self):
         self.assertEqual(self.client_for(self.customer).get('/api/owner/grounds/').status_code, 403)
         self.assertEqual(self.client_for(self.customer).post('/api/owner/grounds/', self.valid,

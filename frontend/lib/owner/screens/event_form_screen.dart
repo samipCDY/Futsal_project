@@ -29,6 +29,7 @@ class _EventFormScreenState extends State<EventFormScreen> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _title;
   late final TextEditingController _description;
+  late final TextEditingController _phone;
   List<GroundModel>? _grounds; // approved grounds the event can be at
   String? _groundId;
   DateTime? _startsAt;
@@ -47,6 +48,8 @@ class _EventFormScreenState extends State<EventFormScreen> {
     final event = widget.event;
     _title = TextEditingController(text: event?.title ?? '');
     _description = TextEditingController(text: event?.description ?? '');
+    _phone = TextEditingController(
+        text: event?.contactPhone ?? context.read<ProfileProvider>().profile?.mobileNumber ?? '');
     _groundId = event?.groundId;
     _startsAt = event?.startsAt;
     _endsAt = event?.endsAt;
@@ -59,6 +62,7 @@ class _EventFormScreenState extends State<EventFormScreen> {
   void dispose() {
     _title.dispose();
     _description.dispose();
+    _phone.dispose();
     super.dispose();
   }
 
@@ -143,6 +147,7 @@ class _EventFormScreenState extends State<EventFormScreen> {
         'ground': int.parse(_groundId!),
         'title': _title.text.trim(),
         'description': _description.text.trim(),
+        'contact_phone': _phone.text.trim(),
         // An unchanged start may already be in the past; the API only checks new ones.
         if (startChanged) 'starts_at': _startsAt!.toUtc().toIso8601String(),
         'ends_at': _endsAt?.toUtc().toIso8601String(),
@@ -251,11 +256,28 @@ class _EventFormScreenState extends State<EventFormScreen> {
             textCapitalization: TextCapitalization.sentences,
             decoration: const InputDecoration(
               labelText: 'Details',
-              hintText: 'Teams, entry fee, prizes, rules, how to register...',
+              hintText: 'Teams, entry fee, prizes, rules, last day to register...',
               alignLabelWithHint: true,
               border: OutlineInputBorder(),
             ),
           ),
+          const SizedBox(height: 8),
+          TextFormField(
+            controller: _phone,
+            keyboardType: TextInputType.phone,
+            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9+\- ]'))],
+            decoration: const InputDecoration(
+              labelText: 'Phone number to register',
+              helperText: 'Customers tap "Call to register" and this number rings.',
+              prefixIcon: Icon(Icons.phone_outlined),
+              border: OutlineInputBorder(),
+            ),
+            validator: (value) {
+              final digits = (value ?? '').replaceAll(RegExp(r'[\s-]'), '');
+              return RegExp(r'^\+?\d{7,15}$').hasMatch(digits) ? null : 'Enter a phone number, e.g. 9812345678';
+            },
+          ),
+          const SizedBox(height: 8),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: Text('Publish now', style: AppTextStyles.body),

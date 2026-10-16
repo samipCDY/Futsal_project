@@ -197,7 +197,7 @@ class EventViewSet(viewsets.ReadOnlyModelViewSet):
             Q(starts_at__gte=cutoff) | Q(ends_at__gte=cutoff),  # skip long-finished ones early
             is_published=True,
             ground__in=Ground.objects.visible(),
-        ).select_related('ground')
+        ).select_related('ground', 'owner')
         ground = self.request.query_params.get('ground', '')
         if ground.isdigit():
             events = events.filter(ground_id=ground)
@@ -220,7 +220,7 @@ class OwnerEventViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, IsGroundOwner]
 
     def get_queryset(self):
-        return Event.objects.filter(owner=self.request.user).select_related('ground').order_by('-starts_at')
+        return Event.objects.filter(owner=self.request.user).select_related('ground', 'owner').order_by('-starts_at')
 
     def perform_create(self, serializer):
         serializer.save(owner=self.request.user)

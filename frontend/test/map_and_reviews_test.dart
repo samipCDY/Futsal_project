@@ -59,4 +59,15 @@ void main() {
     expect(reviews.canReview, isTrue);
     expect(reviews.reviews.single.initials, 'HB');
   });
+
+  test('photos: the gallery, or the one cover photo from before galleries', () {
+    final base = {
+      'id': 1, 'name': 'Arena', 'area': 'Patan', 'latitude': '27.67', 'longitude': '85.32',
+      'morning_price': '1000.00', 'day_price': '1000.00', 'evening_price': '1000.00',
+    };
+    expect(GroundModel.fromJson({...base, 'image_url': 'a.jpg', 'photos': ['a.jpg', 'b.jpg']}).photos,
+        ['a.jpg', 'b.jpg']);
+    expect(GroundModel.fromJson({...base, 'image_url': 'a.jpg', 'photos': []}).photos, ['a.jpg']);
+    expect(GroundModel.fromJson({...base, 'image_url': ''}).photos, isEmpty);
+  });
 }

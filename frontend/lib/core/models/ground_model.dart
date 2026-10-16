@@ -10,6 +10,9 @@ enum GroundStatus { pending, approved, rejected }
 const dayStartsHour = 10;
 const eveningStartsHour = 16;
 
+/// Most photos an owner can add to a ground (backend: grounds.models.MAX_PHOTOS).
+const maxGroundPhotos = 10;
+
 /// A futsal ground as shown to a customer browsing/booking, or to its owner.
 class GroundModel {
   final String id;
@@ -19,7 +22,10 @@ class GroundModel {
   final double morningPrice;
   final double dayPrice;
   final double eveningPrice;
-  final String imageUrl;
+  final String imageUrl; // the cover, same as photos.first
+
+  /// Every photo of the ground, cover first.
+  final List<String> photos;
   final String? badgeLabel;
   final double latitude;
   final double longitude;
@@ -49,6 +55,7 @@ class GroundModel {
     required this.dayPrice,
     required this.eveningPrice,
     required this.imageUrl,
+    this.photos = const [],
     this.badgeLabel,
     required this.latitude,
     required this.longitude,
@@ -76,6 +83,12 @@ class GroundModel {
       dayPrice: double.parse(json['day_price'].toString()),
       eveningPrice: double.parse(json['evening_price'].toString()),
       imageUrl: json['image_url'] as String? ?? '',
+      photos: [
+        for (final photo in json['photos'] as List? ?? []) photo as String,
+        // Saved before galleries: just the one photo.
+        if ((json['photos'] as List? ?? []).isEmpty && (json['image_url'] as String? ?? '').isNotEmpty)
+          json['image_url'] as String,
+      ],
       badgeLabel: badge.isEmpty ? null : badge,
       latitude: double.parse(json['latitude'].toString()),
       longitude: double.parse(json['longitude'].toString()),
@@ -104,6 +117,7 @@ class GroundModel {
         dayPrice: dayPrice,
         eveningPrice: eveningPrice,
         imageUrl: imageUrl,
+        photos: photos,
         badgeLabel: badgeLabel,
         latitude: latitude,
         longitude: longitude,

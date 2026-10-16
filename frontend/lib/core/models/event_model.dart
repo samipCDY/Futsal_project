@@ -9,6 +9,9 @@ class EventModel {
   final DateTime startsAt;
   final DateTime? endsAt;
   final String imageUrl;
+
+  /// Customers call this number to register.
+  final String contactPhone;
   final bool isPublished;
   final bool isExpired;
   final bool isMine;
@@ -23,6 +26,7 @@ class EventModel {
     required this.startsAt,
     this.endsAt,
     this.imageUrl = '',
+    this.contactPhone = '',
     required this.isPublished,
     required this.isExpired,
     required this.isMine,
@@ -38,6 +42,7 @@ class EventModel {
         startsAt: DateTime.parse(json['starts_at'] as String).toLocal(),
         endsAt: json['ends_at'] == null ? null : DateTime.parse(json['ends_at'] as String).toLocal(),
         imageUrl: json['image_url'] as String? ?? '',
+        contactPhone: json['contact_phone'] as String? ?? '',
         isPublished: json['is_published'] as bool? ?? true,
         isExpired: json['is_expired'] as bool? ?? false,
         isMine: json['is_mine'] as bool? ?? false,
